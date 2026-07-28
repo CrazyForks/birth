@@ -115,7 +115,7 @@ Bug 与建议请提 [GitHub Issues](https://github.com/iAmCorey/birth/issues)。
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=iAmCorey/birth&type=Date)](https://star-history.com/#iAmCorey/birth&Date)
+[![Star History Chart](https://api.star-history.com/chart?repos=iAmCorey/birth&type=date&legend=top-left&sealed_token=hIIjaB8VdxTXapQfdFESc9Lj0qVmiw8GcYReRfu82miGgvHJurKJxrmcz4kK5Xx3015mDNMlofNWyNeyWnYsNaOyHBodWt2cDNzZVAH2Oc6nrkg_RFTkcA)](https://www.star-history.com/?type=date&repos=iAmCorey%2Fbirth)
 
 ## 许可证
 
