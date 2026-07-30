@@ -1,151 +1,185 @@
 import Foundation
+import OpenDirectory
+import OSLog
 
-/// Reads BTM login items via `sfltool dumpbtm`, which requires
-/// Full Disk Access. Failure degrades gracefully — the caller shows
-/// the launchd-based lists and a hint about granting access.
+/// Reads the Background Task Management store directly. The caller needs
+/// Full Disk Access, but no subprocess or administrator prompt is involved.
 public struct BTMReader: Sendable {
-    public enum BTMError: Error, LocalizedError {
-        case accessDenied(detail: String)
+    public enum BTMError: Error, LocalizedError, Sendable, Equatable {
+        case fullDiskAccessRequired
+        case storeUnavailable(detail: String)
+        case unsupportedFormat(detail: String)
+        case accountUnavailable(detail: String)
 
         public var errorDescription: String? {
             switch self {
-            case .accessDenied:
+            case .fullDiskAccessRequired:
                 L("error.fdaNeeded")
+            case .storeUnavailable:
+                L("error.btmUnavailable")
+            case .unsupportedFormat:
+                L("error.btmUnsupported")
+            case .accountUnavailable:
+                L("error.btmAccount")
+            }
+        }
+
+        public var requiresFullDiskAccess: Bool {
+            self == .fullDiskAccessRequired
+        }
+
+        public var diagnosticDetail: String {
+            switch self {
+            case .fullDiskAccessRequired:
+                "Full Disk Access is required"
+            case .storeUnavailable(let detail),
+                 .unsupportedFormat(let detail),
+                 .accountUnavailable(let detail):
+                detail
             }
         }
     }
+
+    enum ProbeSignal: Equatable {
+        case granted
+        case denied
+        case inconclusive
+    }
+
+    static let btmStoreDirectory = "/var/db/com.apple.backgroundtaskmanagement"
+    private static let storePrefix = "BackgroundItems-v"
+    private static let storeSuffix = ".btm"
+    private static let logger = Logger(subsystem: "dev.birth.Birth", category: "BTM")
 
     public init() {}
 
-    /// What one filesystem probe can testify about Full Disk Access.
-    enum ProbeSignal {
-        case granted        // open/listing succeeded — FDA is on
-        case denied         // EPERM: TCC refused — FDA is off
-        case inconclusive   // ENOENT (path moved between OS releases) or
-                            // EACCES etc. (plain POSIX, says nothing re TCC)
-    }
-
-    /// The store `sfltool dumpbtm` reads; home of BackgroundItems-v*.btm
-    /// since macOS 13.
-    static let btmStoreDirectory = "/var/db/com.apple.backgroundtaskmanagement"
-
-    /// `sfltool dumpbtm` reads the BTM store directly when this process has
-    /// Full Disk Access — but WITHOUT it, the tool falls back to requesting
-    /// admin rights via Authorization Services, which surfaces a system
-    /// password dialog ("sfltool wants to make changes") on every refresh.
-    /// Probe FDA first so we never spawn a prompting sfltool.
-    ///
-    /// Probe chain, first conclusive signal wins:
-    /// 1. Listing the BTM store directory — the very data we're about to
-    ///    read, POSIX-open (755 root:wheel) so only TCC can refuse it.
-    /// 2./3. Opening the user/system TCC.db — the classic probe, kept for
-    ///    macOS ≤ 26. macOS 27 moved the user database into a ProtectedSystem
-    ///    container that even FDA can't read (by design, so FDA processes
-    ///    can no longer edit privacy grants) — there it reports ENOENT and
-    ///    defers to probe 1 instead of false-negating (issue #1).
-    ///
-    /// An exhausted chain counts as denied: wrongly showing the grant-access
-    /// hint costs a click, wrongly spawning sfltool costs a password dialog.
+    /// Capability probe for the exact resource Birth consumes. It does not
+    /// infer FDA from TCC databases or directory permissions that can move or
+    /// change semantics between macOS releases.
     public static func hasFullDiskAccess() -> Bool {
-        let probes: [() -> ProbeSignal] = [
-            { probeListing(btmStoreDirectory) },
-            { probeOpen(NSHomeDirectory() + "/Library/Application Support/com.apple.TCC/TCC.db") },
-            { probeOpen("/Library/Application Support/com.apple.TCC/TCC.db") },
-        ]
-        for probe in probes {
-            switch probe() {
-            case .granted: return true
-            case .denied: return false
-            case .inconclusive: continue
-            }
-        }
-        return false
+        guard let storeURL = try? latestStoreURL() else { return false }
+        return probeOpen(storeURL.path) == .granted
     }
 
-    /// TCC refusals are EPERM; a moved path is ENOENT; POSIX-mode refusals
-    /// are EACCES. Only the first two testify about FDA, which is why this
-    /// inspects errno instead of nil-checking a FileHandle. Must be a real
-    /// open — access() would pass on user-owned files regardless of TCC.
+    /// Login items for the current account, excluding legacy launchd
+    /// duplicates and grouping/plugin records.
+    public func loginItems(uid: Int = Int(getuid())) async throws -> [BTMItem] {
+        do {
+            return try await Task.detached(priority: .userInitiated) {
+                let storeURL = try Self.latestStoreURL()
+                let data = try Self.readStore(at: storeURL)
+                let accountIdentifier = try Self.accountIdentifier(for: uid)
+                return try BTMArchiveDecoder.decode(data, accountIdentifier: accountIdentifier)
+            }.value
+        } catch let error as BTMError {
+            Self.logger.error("BTM read failed: \(error.diagnosticDetail, privacy: .public)")
+            throw error
+        } catch {
+            Self.logger.error("BTM read failed: \(error.localizedDescription, privacy: .public)")
+            throw BTMError.storeUnavailable(detail: error.localizedDescription)
+        }
+    }
+
+    static func latestStoreURL(
+        in directory: URL = URL(filePath: btmStoreDirectory, directoryHint: .isDirectory)
+    ) throws -> URL {
+        let urls: [URL]
+        do {
+            urls = try FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            )
+        } catch {
+            throw classifyReadError(error)
+        }
+
+        let candidates = urls.compactMap { url -> (url: URL, version: Int, modified: Date)? in
+            let name = url.lastPathComponent
+            guard name.hasPrefix(storePrefix), name.hasSuffix(storeSuffix) else { return nil }
+            let versionStart = name.index(name.startIndex, offsetBy: storePrefix.count)
+            let versionEnd = name.index(name.endIndex, offsetBy: -storeSuffix.count)
+            guard versionStart < versionEnd,
+                  let version = Int(name[versionStart..<versionEnd])
+            else { return nil }
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
+            guard values?.isRegularFile != false else { return nil }
+            return (url, version, values?.contentModificationDate ?? .distantPast)
+        }
+        guard let newest = candidates.max(by: { lhs, rhs in
+            lhs.version == rhs.version ? lhs.modified < rhs.modified : lhs.version < rhs.version
+        }) else {
+            throw BTMError.storeUnavailable(detail: "No BackgroundItems-v*.btm store found")
+        }
+        return newest.url
+    }
+
+    static func readStore(at url: URL) throws -> Data {
+        do {
+            // The daemon replaces this archive while updating it. Keep an
+            // owned snapshot: memory-mapped Data can otherwise observe a
+            // truncated/replaced file halfway through decoding.
+            return try Data(contentsOf: url)
+        } catch {
+            throw classifyReadError(error)
+        }
+    }
+
     static func probeOpen(_ path: String) -> ProbeSignal {
-        let fd = open(path, O_RDONLY)
-        if fd >= 0 {
-            close(fd)
+        let descriptor = open(path, O_RDONLY)
+        if descriptor >= 0 {
+            close(descriptor)
             return .granted
         }
-        return errno == EPERM ? .denied : .inconclusive
+        if errno == EPERM || errno == EACCES { return .denied }
+        return .inconclusive
     }
 
-    /// Directory flavor of `probeOpen`. TCC gates the listing itself, so
-    /// read one entry ("." at minimum) before calling it granted.
-    static func probeListing(_ path: String) -> ProbeSignal {
-        guard let dir = opendir(path) else {
-            return errno == EPERM ? .denied : .inconclusive
+    static func classifyReadError(_ error: Error) -> BTMError {
+        let nsError = error as NSError
+        if nsError.domain == NSPOSIXErrorDomain,
+           nsError.code == Int(EPERM) || nsError.code == Int(EACCES) {
+            return .fullDiskAccessRequired
         }
-        defer { closedir(dir) }
-        errno = 0
-        if readdir(dir) != nil { return .granted }
-        return errno == EPERM ? .denied : .inconclusive
+        if nsError.domain == NSCocoaErrorDomain,
+           nsError.code == CocoaError.fileReadNoPermission.rawValue {
+            return .fullDiskAccessRequired
+        }
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? Error,
+           case .fullDiskAccessRequired = classifyReadError(underlying) {
+            return .fullDiskAccessRequired
+        }
+        return .storeUnavailable(detail: nsError.localizedDescription)
     }
 
-    /// Login items for the given user, excluding legacy launchd duplicates,
-    /// grouping containers, and plugin records.
-    public func loginItems(uid: Int = Int(getuid())) async throws -> [BTMItem] {
-        guard Self.hasFullDiskAccess() else {
-            throw BTMError.accessDenied(detail: "Full Disk Access not granted")
-        }
-        let result: ProcessResult
+    /// The BTM store groups records by the account's GeneratedUID rather
+    /// than numeric POSIX UID. OpenDirectory is public and performs this
+    /// lookup without extra privileges or external commands.
+    static func accountIdentifier(for uid: Int) throws -> String {
         do {
-            result = try await ProcessRunner.run("/usr/bin/sfltool", ["dumpbtm"])
-        } catch {
-            throw BTMError.accessDenied(detail: String(describing: error))
-        }
-        guard result.succeeded, !result.stdout.isEmpty else {
-            throw BTMError.accessDenied(detail: result.stderr)
-        }
-        return BTMParser.items(in: result.stdout, uid: uid)
-            .filter { BTMParser.modernItemTypes.contains($0.typeDescription) }
-    }
-}
-
-extension LaunchItem {
-    /// Bridge a BTM record into the unified item model.
-    public init(btmItem: BTMItem) {
-        let name = btmItem.name
-            ?? btmItem.bundleIdentifier
-            ?? btmItem.identifier
-            ?? btmItem.uuid
-        let label = btmItem.bundleIdentifier ?? btmItem.identifier ?? name
-
-        var executable = btmItem.executablePath
-        if executable == nil,
-           let urlString = btmItem.urlString,
-           let url = URL(string: urlString), url.isFileURL {
-            executable = url.path
-        }
-
-        // BTM records carry the developer identity directly; trust it for
-        // display instead of re-verifying the binary.
-        var signature: SignatureInfo?
-        if let team = btmItem.teamIdentifier {
-            signature = SignatureInfo(
-                kind: .developerID,
-                developerName: btmItem.developerName,
-                teamID: team
+            let node = try ODNode(
+                session: .default(),
+                type: ODNodeType(kODNodeTypeLocalNodes)
             )
-        } else if label.hasPrefix("com.apple.") {
-            signature = SignatureInfo(kind: .apple)
+            let query = try ODQuery(
+                node: node,
+                forRecordTypes: kODRecordTypeUsers,
+                attribute: kODAttributeTypeUniqueID,
+                matchType: ODMatchType(kODMatchEqualTo),
+                queryValues: String(uid),
+                returnAttributes: kODAttributeTypeGUID,
+                maximumResults: 1
+            )
+            let records = try query.resultsAllowingPartial(false) as? [ODRecord] ?? []
+            let values = try records.first?.values(forAttribute: kODAttributeTypeGUID) as? [String]
+            guard let identifier = values?.first, !identifier.isEmpty else {
+                throw BTMError.accountUnavailable(detail: "No GeneratedUID for POSIX UID \(uid)")
+            }
+            return identifier
+        } catch let error as BTMError {
+            throw error
+        } catch {
+            throw BTMError.accountUnavailable(detail: error.localizedDescription)
         }
-
-        self.init(
-            id: "btm:\(btmItem.uuid)",
-            label: label,
-            displayName: name,
-            domain: .loginItem,
-            plistURL: nil,
-            executablePath: executable,
-            enablement: .managedBySystem(enabled: btmItem.isEnabled ?? true),
-            signature: signature,
-            btmTypeDescription: btmItem.typeDescription
-        )
     }
 }

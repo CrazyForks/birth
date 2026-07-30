@@ -20,9 +20,8 @@ public enum ProcessRunner {
         }
     }
 
-    /// Run an external tool and capture its output. The watchdog matters:
-    /// tools like sfltool can hang indefinitely waiting on tccd when the
-    /// app's privacy authorization is stale.
+    /// Run an external tool and capture its output. The watchdog prevents a
+    /// stalled system service or command from pinning a refresh forever.
     public static func run(
         _ executablePath: String,
         _ arguments: [String],

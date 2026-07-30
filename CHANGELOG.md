@@ -2,6 +2,12 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.7] - 2026-07-30
+
+### 修复
+
+- **高级登录项刷新反复要求管理员密码**（[#3](https://github.com/iAmCorey/birth/issues/3)）：高级登录项改为在 Birth 进程内直接解码受完全磁盘访问权限保护的 BTM 数据库，正常路径不再启动 `sfltool`，因此授权一次后可持续静默刷新。权限拒绝、数据库不可用与系统格式变化现在分别提示，不再把所有读取失败误报为“缺少完全磁盘访问权限”
+
 ## [0.2.6] - 2026-07-30
 
 ### 新增
@@ -94,6 +100,7 @@
 - **全中文界面**（含系统菜单栏，声明 zh-Hans 本地化）
 - **测试与发版设施**：45 个单元测试（含伪装检测与特权命令标记协议回归）；`scripts/release-check.sh` 发版门禁（测试 → 打包 → 冒烟启动 → 进程 / 主线程 / 崩溃三重健康检查）；GitHub Actions CI
 
+[0.2.7]: https://github.com/iAmCorey/birth/releases/tag/v0.2.7
 [0.2.6]: https://github.com/iAmCorey/birth/releases/tag/v0.2.6
 [0.2.5]: https://github.com/iAmCorey/birth/releases/tag/v0.2.5
 [0.2.4]: https://github.com/iAmCorey/birth/releases/tag/v0.2.4

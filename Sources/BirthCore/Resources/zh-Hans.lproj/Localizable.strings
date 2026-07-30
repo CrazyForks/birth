@@ -13,5 +13,8 @@
 "error.removedStillRunning" = "已移除，但该任务的进程仍在运行；注销或重启后将彻底停止。";
 "error.trashFailed" = "无法将 plist 文件移到废纸篓（权限或磁盘错误），未做任何更改。";
 "error.fdaNeeded" = "无法读取登录项数据库。请在系统设置 > 隐私与安全性中授予 Birth“完全磁盘访问权限”。";
+"error.btmUnavailable" = "macOS 登录项数据库暂时不可用。";
+"error.btmUnsupported" = "当前 macOS 使用了 Birth 尚未支持的登录项数据库格式。";
+"error.btmAccount" = "Birth 无法将登录项数据库与当前 macOS 账户匹配。";
 "error.automationDenied" = "Birth 未获准控制“系统事件”。请在系统设置 > 隐私与安全性 > 自动化中允许 Birth。";
 "error.timeout" = "%@ 在 %lld 秒内未完成，已被强制终止。";

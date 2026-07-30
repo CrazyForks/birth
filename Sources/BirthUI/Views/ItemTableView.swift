@@ -9,8 +9,8 @@ struct ItemTableView: View {
             if state.isLoading && !state.hasLoadedOnce {
                 ProgressView(L("advanced.scanning"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if showsFullDiskAccessGuidance {
-                fullDiskAccessGuidance
+            } else if showsLoginItemsGuidance {
+                loginItemsGuidance
             } else if state.visibleItems.isEmpty {
                 emptyState
             } else {
@@ -65,26 +65,58 @@ struct ItemTableView: View {
         }
     }
 
-    /// The 登录项 domain is the only slice that needs Full Disk Access.
-    /// When it's selected and unreadable, replace the empty table with a
-    /// one-time-setup walkthrough instead of a shrug.
-    private var showsFullDiskAccessGuidance: Bool {
+    /// When the BTM slice is unreadable, replace the empty table with
+    /// error-specific recovery instead of treating every failure as FDA.
+    private var showsLoginItemsGuidance: Bool {
         state.selection == .domain(.loginItem)
             && state.loginItemsError != nil
             && state.visibleItems.isEmpty
     }
 
-    private var fullDiskAccessGuidance: some View {
-        ContentUnavailableView {
-            Label(L("fda.guide.title"), systemImage: "lock.shield")
-        } description: {
-            Text(L("fda.guide.body"))
-        } actions: {
-            Button(L("common.openPrivacySettings")) {
-                state.openFullDiskAccessSettings()
+    @ViewBuilder
+    private var loginItemsGuidance: some View {
+        switch state.loginItemsError {
+        case .fullDiskAccessRequired:
+            ContentUnavailableView {
+                Label(L("fda.guide.title"), systemImage: "lock.shield")
+            } description: {
+                Text(L("fda.guide.body"))
+            } actions: {
+                Button(L("common.openPrivacySettings")) {
+                    state.openFullDiskAccessSettings()
+                }
+                Button(L("fda.guide.refreshed")) {
+                    Task { await state.refresh() }
+                }
             }
-            Button(L("fda.guide.refreshed")) {
+        case .unsupportedFormat:
+            ContentUnavailableView {
+                Label(L("btm.unsupported.title"), systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(L("btm.unsupported.body"))
+            } actions: {
+                retryAndSystemSettingsButtons
+            }
+        case .storeUnavailable, .accountUnavailable:
+            ContentUnavailableView {
+                Label(L("btm.unavailable.title"), systemImage: "externaldrive.badge.exclamationmark")
+            } description: {
+                Text(L("btm.unavailable.body"))
+            } actions: {
+                retryAndSystemSettingsButtons
+            }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private var retryAndSystemSettingsButtons: some View {
+        Group {
+            Button(L("common.tryAgain")) {
                 Task { await state.refresh() }
+            }
+            Button(L("common.openSystemSettings")) {
+                state.openLoginItemsSettings()
             }
         }
     }
@@ -168,8 +200,8 @@ struct ItemTableView: View {
         return item.domain.displayName
     }
 
-    /// Maps `sfltool dumpbtm` type strings to Chinese; unknown values pass
-    /// through capitalized so new BTM types still show something sensible.
+    /// Maps normalized BTM type names to the UI language; unknown values
+    /// pass through capitalized so new types still show something sensible.
     private static func localizedBTMType(_ raw: String) -> String {
         switch raw.lowercased() {
         case "app": "App"

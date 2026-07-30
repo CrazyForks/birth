@@ -165,7 +165,7 @@ final class AppState {
     }
 
     var items: [LaunchItem] = []
-    var loginItemsError: String?
+    var loginItemsError: BTMReader.BTMError?
     var isLoading = false
     var hasLoadedOnce = false
     /// Drives the "missing Full Disk Access" dialog after a manual refresh.
@@ -392,16 +392,16 @@ final class AppState {
         }
         recomputeRestorableRemoved()
         // Coming back from System Settings after granting Full Disk Access
-        // should just work — whichever door led there (refresh dialog,
-        // sidebar card, or the 登录项 guidance page). Refresh only when the
-        // slice failed earlier AND the cheap filesystem probe now passes;
-        // while access stays missing, activation costs one probe, not a
-        // full rescan.
+        // should just work. Only a real permission failure auto-retries;
+        // format/store failures cannot be fixed in Privacy settings.
         NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, self.loginItemsError != nil, BTMReader.hasFullDiskAccess() else { return }
+                guard let self,
+                      case .fullDiskAccessRequired? = self.loginItemsError,
+                      BTMReader.hasFullDiskAccess()
+                else { return }
                 Task { await self.refresh() }
             }
         }
@@ -570,11 +570,11 @@ final class AppState {
                 try? await Task.sleep(for: .seconds(0.4 - elapsed))
             }
         }
-        // A deliberate refresh that comes back partial deserves a say-so —
-        // every time, but only where the gap is visible: 全部 and 登录项
-        // include the missing slice; the other domains refreshed complete,
-        // so prompting there would be noise about somebody else's view.
-        if userInitiated, loginItemsError != nil, selectionCoversLoginItems {
+        // Only a genuine FDA denial gets the privacy alert. An unknown BTM
+        // format or transient store error has its own in-place guidance.
+        if userInitiated,
+           loginItemsError?.requiresFullDiskAccess == true,
+           selectionCoversLoginItems {
             showFullDiskAccessPrompt = true
         }
         // Off the critical path: the list appears immediately and the

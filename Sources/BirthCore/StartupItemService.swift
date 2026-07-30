@@ -4,10 +4,11 @@ import Foundation
 public struct StartupItemService: Sendable {
     public struct Snapshot: Sendable {
         public var items: [LaunchItem]
-        /// Non-nil when BTM login items could not be read (usually missing Full Disk Access).
-        public var loginItemsError: String?
+        /// Typed so the UI only offers FDA for a real permission denial;
+        /// format and store failures require different recovery actions.
+        public var loginItemsError: BTMReader.BTMError?
 
-        public init(items: [LaunchItem] = [], loginItemsError: String? = nil) {
+        public init(items: [LaunchItem] = [], loginItemsError: BTMReader.BTMError? = nil) {
             self.items = items
             self.loginItemsError = loginItemsError
         }
@@ -53,12 +54,14 @@ public struct StartupItemService: Sendable {
             )
         }
 
-        var loginItemsError: String?
+        var loginItemsError: BTMReader.BTMError?
         do {
             let btmItems = try await btmReader.loginItems()
             items.append(contentsOf: btmItems.map(LaunchItem.init(btmItem:)))
+        } catch let error as BTMReader.BTMError {
+            loginItemsError = error
         } catch {
-            loginItemsError = error.localizedDescription
+            loginItemsError = .storeUnavailable(detail: error.localizedDescription)
         }
 
         return Snapshot(items: items, loginItemsError: loginItemsError)

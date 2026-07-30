@@ -10,6 +10,8 @@
 "common.itemCount" = "%lld items";
 "sidebar.fda.title" = "Login Items Unavailable";
 "sidebar.fda.body" = "Grant Full Disk Access once, and refreshes will read login items silently from then on.";
+"sidebar.btm.body" = "Birth couldn't decode the macOS login items database. No administrator prompt was opened.";
+"sidebar.btm.details" = "View Details";
 "common.openPrivacySettings" = "Open Privacy Settings";
 "error.operationFailed" = "Operation Failed";
 "common.ok" = "OK";
@@ -56,6 +58,11 @@
 "fda.guide.refreshed" = "Authorized — Refresh";
 "fda.alert.title" = "Full Disk Access Missing";
 "fda.alert.body" = "Every other category refreshed normally; only Login Items needs this permission. Grant it once — later refreshes will include login items silently, and this prompt won't appear again. Switching back to Birth after granting refreshes automatically.";
+"btm.unsupported.title" = "Login Item Format Not Supported";
+"btm.unsupported.body" = "macOS changed its private login items database format. Birth stopped safely without calling sfltool or requesting an administrator password. Update Birth when support for this macOS build is available.";
+"btm.unavailable.title" = "Login Items Database Unavailable";
+"btm.unavailable.body" = "Birth couldn't read or match the macOS login items database. Other startup-item categories remain available. Try again, or use System Settings to view login items.";
+"common.tryAgain" = "Try Again";
 "common.notNow" = "Not Now";
 "inspector.empty.title" = "No Selection";
 "inspector.empty.body" = "Select an item in the list to see its details.";

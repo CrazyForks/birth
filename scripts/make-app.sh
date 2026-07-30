@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="${VERSION:-0.2.6}"
+VERSION="${VERSION:-0.2.7}"
 APP=dist/Birth.app
 BUILD_ARGS=(-c release)
 if [[ "${1:-}" == "universal" ]]; then
