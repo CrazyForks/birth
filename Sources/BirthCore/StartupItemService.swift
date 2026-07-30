@@ -99,10 +99,10 @@ public struct StartupItemService: Sendable {
             let command = enabled
                 ? launchctl.shellCommandToEnableDaemon(label: item.label, plistPath: item.plistURL?.path)
                 : launchctl.shellCommandToDisableDaemon(label: item.label)
-            let verb = enabled ? "启用" : "停用"
+            let verb = enabled ? L("core.enable") : L("core.disable")
             let output = try await PrivilegedRunner.runShell(
                 command,
-                prompt: "Birth 想要\(verb)启动项“\(item.displayName)”。"
+                prompt: L("prompt.setEnabled", verb, item.displayName)
             )
             switch LaunchctlClient.parsePrivilegedOutcome(output) {
             case .ok:
@@ -110,7 +110,7 @@ public struct StartupItemService: Sendable {
             case .persistFailed:
                 throw LaunchctlError.commandFailed(
                     command: enabled ? "enable" : "disable",
-                    detail: "无法写入持久化的开关状态，未做任何更改。"
+                    detail: L("error.persistFailed")
                 )
             case .stillLoaded:
                 throw LaunchctlError.disabledButStillRunning

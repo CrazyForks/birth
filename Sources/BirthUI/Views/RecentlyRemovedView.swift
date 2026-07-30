@@ -12,9 +12,9 @@ struct RecentlyRemovedView: View {
         Group {
             if state.restorableRemovedLoginApps.isEmpty {
                 ContentUnavailableView {
-                    Label("没有最近移除的 App", systemImage: "clock.arrow.circlepath")
+                    Label(L("removed.empty.title"), systemImage: "clock.arrow.circlepath")
                 } description: {
-                    Text("从“启动应用”移除的 App 会记录在这里，可以一键重新启用。")
+                    Text(L("removed.empty.body"))
                 }
             } else {
                 List {
@@ -23,7 +23,7 @@ struct RecentlyRemovedView: View {
                             RemovedLoginAppRow(app: app)
                         }
                     } footer: {
-                        Text("记录只保存在本机，最多保留 10 条。重新启用或从磁盘删除 App 后会自动消失。")
+                        Text(L("removed.footer"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, 6)
@@ -32,25 +32,25 @@ struct RecentlyRemovedView: View {
                 .listStyle(.inset)
             }
         }
-        .navigationTitle("最近移除")
-        .navigationSubtitle("共 \(state.restorableRemovedLoginApps.count) 项")
+        .navigationTitle(L("sidebar.recentlyRemoved"))
+        .navigationSubtitle(L("common.itemCount", state.restorableRemovedLoginApps.count))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("清空记录") {
+                Button(L("removed.clear")) {
                     confirmingClear = true
                 }
                 .disabled(state.restorableRemovedLoginApps.isEmpty)
             }
         }
         .confirmationDialog(
-            "清空最近移除记录？",
+            L("removed.clearConfirm"),
             isPresented: $confirmingClear
         ) {
-            Button("清空", role: .destructive) {
+            Button(L("removed.clearAction"), role: .destructive) {
                 state.clearRemovedLoginAppRecords()
             }
         } message: {
-            Text("仅清除这份记录，不会影响任何 App 或登录设置。")
+            Text(L("removed.clearBody"))
         }
         // The restorable filter needs the live list to hide re-added apps.
         .task { await state.loadLoginApps() }
@@ -72,24 +72,24 @@ struct RemovedLoginAppRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(app.name)
                     .foregroundStyle(.secondary)
-                Text("已从“启动应用”移除")
+                Text(L("removed.subtitle"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
 
             Spacer()
 
-            MutationButton(title: "重新启用", isBusy: state.busyLoginAppPaths.contains(app.path)) {
+            MutationButton(title: L("removed.reenable"), isBusy: state.busyLoginAppPaths.contains(app.path)) {
                 state.reenableLoginApp(app)
             }
-            .help("重新在登录时打开此 App")
+            .help(L("removed.reenableHelp"))
         }
         .padding(.vertical, 2)
         .contextMenu {
-            Button("在访达中显示") {
+            Button(L("common.revealInFinder")) {
                 state.revealInFinder(URL(filePath: app.path))
             }
-            Button("从记录中清除") {
+            Button(L("removed.forget")) {
                 state.forgetRemovedLoginApp(app)
             }
         }

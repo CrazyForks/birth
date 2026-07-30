@@ -13,7 +13,7 @@ struct RefreshToolbarButton: View {
             Task { await state.refresh(userInitiated: true) }
         } label: {
             ZStack {
-                Label("刷新", systemImage: "arrow.clockwise")
+                Label(L("common.refresh"), systemImage: "arrow.clockwise")
                     .opacity(state.isLoading ? 0 : 1)
                 if state.isLoading {
                     ProgressView()

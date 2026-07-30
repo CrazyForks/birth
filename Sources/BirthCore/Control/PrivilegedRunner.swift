@@ -9,7 +9,7 @@ public enum PrivilegedRunner {
 
         public var errorDescription: String? {
             switch self {
-            case .cancelled: "管理员授权已取消。"
+            case .cancelled: L("error.authCanceled")
             case .failed(let detail): detail
             }
         }

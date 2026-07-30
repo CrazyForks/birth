@@ -16,31 +16,31 @@ struct SimpleLoginAppsView: View {
             if let error = state.loginAppsError {
                 automationErrorView(error)
             } else if state.loginApps.isEmpty && state.isLoadingLoginApps {
-                ProgressView("正在读取登录项…")
+                ProgressView(L("loginApps.loading"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if state.loginApps.isEmpty && state.appLikeAgents.isEmpty {
                 emptyState
             } else if state.visibleLoginApps.isEmpty && state.visibleAppLikeAgents.isEmpty {
                 ContentUnavailableView(
-                    "无匹配结果",
+                    L("empty.noResults"),
                     systemImage: "magnifyingglass",
-                    description: Text("没有与“\(state.loginSearchText)”匹配的 App。")
+                    description: Text(L("loginApps.empty.noMatch", state.loginSearchText))
                 )
             } else {
                 appList
             }
         }
-        .navigationTitle("启动应用")
-        .navigationSubtitle("共 \(state.visibleLoginApps.count + state.visibleAppLikeAgents.count) 项")
-        .searchable(text: $state.loginSearchText, placement: .toolbar, prompt: "名称、开发者或路径")
+        .navigationTitle(L("sidebar.loginApps"))
+        .navigationSubtitle(L("common.itemCount", state.visibleLoginApps.count + state.visibleAppLikeAgents.count))
+        .searchable(text: $state.loginSearchText, placement: .toolbar, prompt: Text(L("loginApps.searchPrompt")))
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
                     showingAppPicker = true
                 } label: {
-                    Label("添加 App", systemImage: "plus")
+                    Label(L("loginApps.add"), systemImage: "plus")
                 }
-                .help("添加一个登录时自动打开的 App")
+                .help(L("loginApps.addHelp"))
 
                 RefreshToolbarButton()
             }
@@ -82,10 +82,10 @@ struct SimpleLoginAppsView: View {
                     }
                 } header: {
                     if !state.visibleAppLikeAgents.isEmpty {
-                        Text("登录时打开")
+                        Text(L("loginApps.openAtLogin"))
                     }
                 } footer: {
-                    Text("这些 App 会在你登录 Mac 时自动打开。在这里移除也会同步从系统设置中移除——App 本身仍保留在磁盘上，可随时在侧边栏“最近移除”中重新启用。也可以直接把 App 拖进这个窗口来添加。")
+                    Text(L("loginApps.openAtLoginFooter"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.top, 6)
@@ -97,9 +97,9 @@ struct SimpleLoginAppsView: View {
                         AgentAppRow(item: item)
                     }
                 } header: {
-                    Text("其他方式自启")
+                    Text(L("loginApps.otherWays"))
                 } footer: {
-                    Text("这些 App 通过自带的后台项（LaunchAgent）在登录时自动打开——通常来自 App 内的“开机启动”设置。关闭开关即停止自启（无需密码）；右键可查看详情或彻底移除。")
+                    Text(L("loginApps.otherWaysFooter"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.top, 6)
@@ -111,11 +111,11 @@ struct SimpleLoginAppsView: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("登录时不会打开任何 App", systemImage: "sunrise")
+            Label(L("loginApps.empty.title"), systemImage: "sunrise")
         } description: {
-            Text("在这里添加的 App 会在你登录时自动启动，也可以直接把 App 拖进窗口。")
+            Text(L("loginApps.empty.body"))
         } actions: {
-            Button("添加 App…") { showingAppPicker = true }
+            Button(L("loginApps.addEllipsis")) { showingAppPicker = true }
         }
     }
 
@@ -124,7 +124,7 @@ struct SimpleLoginAppsView: View {
             .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [8, 5]))
             .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
             .overlay {
-                Label("松开以添加到“登录时打开”", systemImage: "plus.app")
+                Label(L("loginApps.dropHint"), systemImage: "plus.app")
                     .font(.title3.weight(.medium))
                     .foregroundStyle(Color.accentColor)
             }
@@ -136,18 +136,18 @@ struct SimpleLoginAppsView: View {
         let isDenied = if case .automationDenied = error { true } else { false }
         return ContentUnavailableView {
             Label(
-                isDenied ? "需要授权才能管理登录项" : "无法读取登录项",
+                isDenied ? L("loginApps.authNeeded") : L("loginApps.cantRead"),
                 systemImage: "lock.shield"
             )
         } description: {
-            Text(error.localizedDescription + (isDenied ? "\n授权后即可添加和移除；查看列表本身无需任何权限。" : ""))
+            Text(error.localizedDescription + (isDenied ? "\n" + L("loginApps.authNote") : ""))
         } actions: {
             if isDenied {
-                Button("打开自动化设置") {
+                Button(L("loginApps.openAutomation")) {
                     state.openAutomationSettings()
                 }
             }
-            Button("返回列表") {
+            Button(L("loginApps.backToList")) {
                 state.loginAppsError = nil
                 Task { await state.loadLoginApps() }
             }
@@ -178,18 +178,18 @@ private struct LoginAppRow: View {
 
             Spacer()
 
-            MutationButton(title: "移除", isBusy: isBusy) {
+            MutationButton(title: L("loginApps.remove"), isBusy: isBusy) {
                 state.removeLoginApp(app)
             }
-            .help("不再于登录时打开此 App")
+            .help(L("loginApps.removeHelp"))
         }
         .padding(.vertical, 4)
         .contextMenu {
-            Button("在访达中显示") {
+            Button(L("common.revealInFinder")) {
                 state.revealInFinder(URL(filePath: app.path))
             }
             if !relatedItems.isEmpty {
-                Button("查看后台项目") {
+                Button(L("loginApps.viewBackground")) {
                     showRelatedInAdvanced()
                 }
             }
@@ -231,14 +231,14 @@ private struct LoginAppRow: View {
         Button {
             showRelatedInAdvanced()
         } label: {
-            Text("+\(relatedItems.count) 后台项")
+            Text(L("loginApps.relatedBadge", relatedItems.count))
                 .font(.caption2.weight(.medium))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(.quaternary, in: Capsule())
         }
         .buttonStyle(.plain)
-        .help("点击查看：\n" + relatedItems.map(\.displayName).joined(separator: "\n"))
+        .help(L("loginApps.relatedHelp") + "\n" + relatedItems.map(\.displayName).joined(separator: "\n"))
     }
 
     private func showRelatedInAdvanced() {
@@ -280,22 +280,22 @@ private struct AgentAppRow: View {
             Spacer()
 
             EnablementToggle(item: item)
-                .help("关闭后不再于登录时自动打开（无需密码）")
+                .help(L("loginApps.toggleHelp"))
         }
         .padding(.vertical, 4)
         .contextMenu {
             if let bundle = item.launchedAppBundlePath {
-                Button("在访达中显示") {
+                Button(L("common.revealInFinder")) {
                     state.revealInFinder(URL(filePath: bundle))
                 }
             }
-            Button("在高级启动项中查看") {
+            Button(L("loginApps.showInAdvanced")) {
                 state.searchText = item.launchedAppName ?? item.displayName
                 state.selection = .all
             }
             if item.isUserRemovable {
                 Divider()
-                Button("移除…", role: .destructive) {
+                Button(L("common.remove"), role: .destructive) {
                     state.itemPendingRemoval = item
                 }
             }
@@ -303,7 +303,7 @@ private struct AgentAppRow: View {
     }
 
     private var subtitle: String {
-        let mechanism = item.domain == .userAgent ? "用户后台项" : "全局后台项"
+        let mechanism = item.domain.displayName
         if let signature = state.signature(for: item) {
             return signature.shortDescription + " · " + mechanism
         }

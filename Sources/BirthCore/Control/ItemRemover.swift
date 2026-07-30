@@ -5,7 +5,7 @@ public struct ItemRemover: Sendable {
     /// Shared verbatim by every "login items are macOS-managed" refusal so
     /// the wording (and the System Settings path in it) can't drift.
     public static let loginItemsManagedMessage =
-        "登录项由 macOS 管理，请前往系统设置 > 通用 > 登录项与扩展进行更改。"
+        L("error.loginItemsManaged")
 
     public enum RemovalError: Error, LocalizedError {
         case notRemovable(String)
@@ -18,7 +18,7 @@ public struct ItemRemover: Sendable {
             switch self {
             case .notRemovable(let reason): reason
             case .removedButStillRunning:
-                "已移除，但该任务的进程仍在运行；注销或重启后将彻底停止。"
+                L("error.removedStillRunning")
             }
         }
     }
@@ -53,7 +53,7 @@ public struct ItemRemover: Sendable {
     public func remove(_ item: LaunchItem) async throws {
         guard let plistURL = item.plistURL else {
             throw RemovalError.notRemovable(
-                "此项目由 macOS 管理，请前往系统设置 > 通用 > 登录项与扩展进行更改。"
+                L("error.itemManaged")
             )
         }
         try backup(item)
@@ -90,10 +90,10 @@ public struct ItemRemover: Sendable {
             ].joined(separator: "; ")
             let output = try await PrivilegedRunner.runShell(
                 command,
-                prompt: "Birth 想要移除启动项“\(item.displayName)”。"
+                prompt: L("prompt.remove", item.displayName)
             )
             if output.contains("BIRTH_MV_FAILED") {
-                throw RemovalError.notRemovable("无法将 plist 文件移到废纸篓（权限或磁盘错误），未做任何更改。")
+                throw RemovalError.notRemovable(L("error.trashFailed"))
             }
             if output.contains("BIRTH_STILL_LOADED") {
                 throw RemovalError.removedButStillRunning

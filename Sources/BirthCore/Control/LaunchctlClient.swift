@@ -202,9 +202,9 @@ public enum LaunchctlError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .commandFailed(let command, let detail):
-            "launchctl \(command) 执行失败：\(detail.trimmingCharacters(in: .whitespacesAndNewlines))"
+            L("error.launchctlFailed", command, detail.trimmingCharacters(in: .whitespacesAndNewlines))
         case .disabledButStillRunning:
-            "已停用，但该任务的进程仍在运行；注销或重启后将彻底停止。"
+            L("error.disabledStillRunning")
         }
     }
 }

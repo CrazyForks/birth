@@ -13,7 +13,7 @@ struct PlistViewer: View {
                 Text(url.lastPathComponent)
                     .font(.headline)
                 Spacer()
-                Button(justCopied ? "已拷贝" : "拷贝") {
+                Button(justCopied ? L("plist.copied") : L("plist.copy")) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(content, forType: .string)
                     justCopied = true
@@ -23,7 +23,7 @@ struct PlistViewer: View {
                     }
                 }
                 .disabled(justCopied)
-                Button("完成") { dismiss() }
+                Button(L("plist.done")) { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
             .padding()
@@ -45,7 +45,7 @@ struct PlistViewer: View {
 
     private func loadContent() -> String {
         guard let data = try? Data(contentsOf: url) else {
-            return "无法读取 \(url.path)"
+            return L("plist.cantRead", url.path)
         }
         // Convert binary plists to XML so they're human-readable.
         if let object = try? PropertyListSerialization.propertyList(from: data, format: nil),

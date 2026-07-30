@@ -6,15 +6,15 @@ struct SidebarView: View {
     var body: some View {
         @Bindable var state = state
         List(selection: $state.selection) {
-            Section("启动应用") {
+            Section(L("sidebar.loginApps")) {
                 // Row reads 全部 inside its group; the window title still
                 // carries the section name (displayTitle = 启动应用).
-                row(.loginApps, overrideTitle: "全部")
+                row(.loginApps, overrideTitle: L("common.all"))
                 if state.count(for: .recentlyRemoved) > 0 {
                     row(.recentlyRemoved)
                 }
             }
-            Section("高级启动项") {
+            Section(L("sidebar.advanced")) {
                 row(.all)
                 ForEach(LaunchItem.Domain.allCases, id: \.self) { domain in
                     row(.domain(domain))
@@ -60,12 +60,12 @@ private struct FullDiskAccessHint: View {
     private var state: AppState { .shared }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("登录项不可用", systemImage: "lock.shield")
+            Label(L("sidebar.fda.title"), systemImage: "lock.shield")
                 .font(.callout.weight(.semibold))
-            Text("授权一次“完全磁盘访问权限”，之后刷新即可静默读取登录项。")
+            Text(L("sidebar.fda.body"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Button("打开隐私设置") {
+            Button(L("common.openPrivacySettings")) {
                 state.openFullDiskAccessSettings()
             }
             .controlSize(.small)

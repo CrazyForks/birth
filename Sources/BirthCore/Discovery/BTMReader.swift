@@ -10,7 +10,7 @@ public struct BTMReader: Sendable {
         public var errorDescription: String? {
             switch self {
             case .accessDenied:
-                "无法读取登录项数据库。请在系统设置 > 隐私与安全性中授予 Birth“完全磁盘访问权限”。"
+                L("error.fdaNeeded")
             }
         }
     }

@@ -17,6 +17,13 @@ private struct StateBox {
         state = AppState(forTesting: defaults)
     }
 
+    /// Reads a key from THIS suite's domain only — plain UserDefaults
+    /// lookups fall through to the global domain (AppleLanguages lives
+    /// there system-wide), which poisons removal assertions.
+    func persisted(_ key: String) -> Any? {
+        defaults.persistentDomain(forName: suite)?[key]
+    }
+
     func cleanUp() {
         defaults.removePersistentDomain(forName: suite)
         // removePersistentDomain empties the domain but can leave the
@@ -258,6 +265,81 @@ struct AppStateTests {
 
         box.state.tableSortOrder = [KeyPathComparator(\LaunchItem.enablement.sortRank)]
         #expect(box.state.visibleItems.map(\.id) == ["managed", "on", "off", "mystery"])
+    }
+
+    /// The choice lives in our own key; AppleLanguages is the mirrored
+    /// effect. 跟随系统 removes both, and the relaunch notice tracks the
+    /// difference against the launch snapshot.
+    @Test func appLanguageRoundTripsThroughAppleLanguages() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+        #expect(box.state.appLanguage == .system)
+        #expect(!box.state.needsRelaunchForLanguage)
+
+        box.state.appLanguage = .english
+        #expect(box.persisted("AppleLanguages") as? [String] == ["en"])
+        #expect(box.state.needsRelaunchForLanguage)
+
+        box.state.appLanguage = .chinese
+        #expect(box.persisted("AppleLanguages") as? [String] == ["zh-Hans"])
+
+        // Back to what this process launched with: notice disappears and
+        // BOTH keys are gone from the app's own domain.
+        box.state.appLanguage = .system
+        #expect(box.persisted("AppleLanguages") == nil)
+        #expect(box.persisted("birthLanguage") == nil)
+        #expect(!box.state.needsRelaunchForLanguage)
+
+        // A revived instance launched under an override reads it back.
+        box.state.appLanguage = .english
+        let revived = AppState(forTesting: box.defaults)
+        #expect(revived.appLanguage == .english)
+        #expect(!revived.needsRelaunchForLanguage)
+    }
+
+    /// The English table must actually resolve — a broken resource-bundle
+    /// path would silently fall back to raw keys everywhere.
+    @Test func englishLocalizationResolves() throws {
+        let english = try #require(uiStringsBundle.path(
+            forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: "en"
+        ))
+        let table = try #require(NSDictionary(contentsOfFile: english) as? [String: String])
+        #expect(table["sidebar.loginApps"] == "Login Apps")
+        #expect(table["common.itemCount"] == "%lld items")
+    }
+
+    /// With semantic keys, a key missing from EITHER table shows as a raw
+    /// key in the UI, and a format-specifier mismatch crashes only in the
+    /// non-source language at runtime. Languages come from AppLanguage so
+    /// a third language is covered the day its case lands. (BirthCore's
+    /// tables have the same check in BirthCoreTests/LocalizationTests.)
+    @Test func localizationTablesStayInLockstep() throws {
+        let languages = AppState.AppLanguage.allCases.compactMap {
+            $0 == .system ? nil : $0.rawValue
+        }
+        var tables: [String: [String: String]] = [:]
+        for language in languages {
+            let path = try #require(uiStringsBundle.path(
+                forResource: "Localizable", ofType: "strings",
+                inDirectory: nil, forLocalization: language
+            ), "BirthUI: missing \(language) table")
+            tables[language] = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
+        }
+        let reference = Set(tables[languages[0]]!.keys)
+        for language in languages.dropFirst() {
+            let keys = Set(tables[language]!.keys)
+            #expect(keys == reference, "BirthUI key sets differ — \(languages[0])-only: \(reference.subtracting(keys).sorted()), \(language)-only: \(keys.subtracting(reference).sorted())")
+        }
+        // Positional prefixes (%1$@) stripped: languages may reorder args,
+        // but the multiset of specifier TYPES must agree per key.
+        for key in reference {
+            let variants = Set(languages.compactMap { language in
+                tables[language]?[key].map { value in
+                    value.matches(of: /%(\d+\$)?(@|lld)/).map { String($0.2) }.sorted().joined(separator: ",")
+                }
+            })
+            #expect(variants.count <= 1, "BirthUI/\(key): format specifiers differ across languages")
+        }
     }
 
     /// Finder-style: the header sort must survive a relaunch, including

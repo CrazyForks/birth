@@ -56,9 +56,9 @@ final class AppState {
         /// menu entry that names a section.
         var displayTitle: String {
             switch self {
-            case .loginApps: "启动应用"
-            case .recentlyRemoved: "最近移除"
-            case .all: "全部"
+            case .loginApps: L("sidebar.loginApps")
+            case .recentlyRemoved: L("sidebar.recentlyRemoved")
+            case .all: L("common.all")
             case .domain(let domain): domain.displayName
             }
         }
@@ -91,11 +91,27 @@ final class AppState {
 
         var displayName: String {
             switch self {
-            case .all: "全部"
-            case .running: "运行中"
-            case .loadedIdle: "已加载（空闲）"
-            case .notLoaded: "未加载"
+            case .all: L("common.all")
+            case .running: L("runState.running")
+            case .loadedIdle: L("runState.loadedIdle")
+            case .notLoaded: L("runState.notLoaded")
             }
+        }
+    }
+
+    /// The Settings pane's language override. The choice lives in our own
+    /// `birthLanguage` key; AppleLanguages is only the applied EFFECT.
+    /// Reading AppleLanguages back is unreliable as a source of truth:
+    /// UserDefaults lookups fall through to the global domain, where the
+    /// system's language list lives — a system list that happens to start
+    /// with a bare "en" would masquerade as a manual override.
+    enum AppLanguage: String, CaseIterable {
+        case system
+        case chinese = "zh-Hans"
+        case english = "en"
+
+        static func stored(in defaults: UserDefaults) -> AppLanguage {
+            defaults.string(forKey: "birthLanguage").flatMap(AppLanguage.init(rawValue:)) ?? .system
         }
     }
 
@@ -141,9 +157,9 @@ final class AppState {
 
         var displayName: String {
             switch self {
-            case .all: "全部"
-            case .enabled: "已启用"
-            case .disabled: "已停用"
+            case .all: L("common.all")
+            case .enabled: L("enablement.enabled")
+            case .disabled: L("enablement.disabled")
             }
         }
     }
@@ -183,6 +199,83 @@ final class AppState {
             defaults.set(encoded, forKey: "tableSortOrder")
         }
     }
+    /// Language override: the choice is persisted under our own key and
+    /// mirrored into AppleLanguages, which the system resolves at NEXT
+    /// launch — hence the relaunch notice.
+    var appLanguage: AppLanguage {
+        didSet {
+            switch appLanguage {
+            case .system:
+                defaults.removeObject(forKey: "birthLanguage")
+                defaults.removeObject(forKey: "AppleLanguages")
+            case .chinese, .english:
+                defaults.set(appLanguage.rawValue, forKey: "birthLanguage")
+                defaults.set([appLanguage.rawValue], forKey: "AppleLanguages")
+            }
+        }
+    }
+    /// Snapshot at launch: the pane shows the relaunch notice only while
+    /// the selection differs from what this process was started with —
+    /// switching back hides it again.
+    @ObservationIgnored private let languageAtLaunch: AppLanguage
+    var needsRelaunchForLanguage: Bool {
+        appLanguage != languageAtLaunch
+    }
+
+    /// What 跟随系统 resolves to RIGHT NOW, using the OS's own language
+    /// matcher against the system-wide (global-domain) preference list.
+    /// Neither Locale nor plain UserDefaults can answer this: the
+    /// process's locale is frozen at launch, and a plain lookup falls
+    /// through to whatever per-app override is being edited. Hand-rolled
+    /// prefix matching would diverge from the app's real resolution
+    /// (zh-Hant, fr, ja...) — unmatched systems land on Chinese, the
+    /// package's defaultLocalization.
+    var resolvedSystemLanguage: AppLanguage {
+        let global = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)
+        let preferences = global?["AppleLanguages"] as? [String] ?? []
+        let available = AppLanguage.allCases.compactMap { $0 == .system ? nil : $0.rawValue }
+        // The dev region rides at the END of the preference list: the API
+        // alone answers "en" for a fr/ja system (bare-array fallback), but
+        // at launch CFBundle falls back to CFBundleDevelopmentRegion
+        // (zh-Hans) — appending it reproduces the launch behavior, while
+        // any genuine match (zh-Hant systems carry en-TW) still wins first.
+        let best = Bundle.preferredLocalizations(
+            from: available, forPreferences: preferences + [AppLanguage.chinese.rawValue]
+        ).first
+        return best.flatMap(AppLanguage.init(rawValue:)) ?? .chinese
+    }
+
+    /// Spawn a fresh instance (which reads the new AppleLanguages) and
+    /// quit this one — terminating only in the spawn's completion, so
+    /// quitting can never outrun the launch request (a timer here would
+    /// occasionally exit without a successor on a loaded machine). The
+    /// brief two-instance overlap is harmless. Outside a packaged .app
+    /// (swift run) there is no bundle to respawn — just quit.
+    func relaunchApp() {
+        let url = Bundle.main.bundleURL
+        guard url.pathExtension == "app" else {
+            NSApp.terminate(nil)
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { app, error in
+            DispatchQueue.main.async {
+                // Quit ONLY behind a live successor. A failed spawn (app
+                // moved/deleted, Launch Services error) must keep this
+                // instance alive — quitting would look like a crash.
+                if app != nil {
+                    NSApp.terminate(nil)
+                } else {
+                    let reason = error?.localizedDescription
+                    AppState.shared.lastErrorMessage = reason.map {
+                        L("settings.relaunchFailed") + "\n" + $0
+                    } ?? L("settings.relaunchFailed")
+                }
+            }
+        }
+    }
+
     var selectedItemID: LaunchItem.ID? {
         // Selection still drives the pane both ways (click a row → details,
         // click blank space → pane closes), matching the old reflex.
@@ -276,6 +369,9 @@ final class AppState {
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        let language = AppLanguage.stored(in: defaults)
+        appLanguage = language
+        languageAtLaunch = language
         let stored = defaults.string(forKey: "sidebarSelection")
         selection = stored.flatMap(SidebarSection.init(storageValue:)) ?? .loginApps
         // In-init assignment skips didSet, so restoring doesn't re-write.
@@ -807,10 +903,10 @@ extension LaunchItem {
 extension LaunchItem.Domain {
     var displayName: String {
         switch self {
-        case .userAgent: "用户后台项"
-        case .globalAgent: "全局后台项"
-        case .globalDaemon: "守护进程"
-        case .loginItem: "登录项"
+        case .userAgent: L("domain.userAgent")
+        case .globalAgent: L("domain.globalAgent")
+        case .globalDaemon: L("domain.daemon")
+        case .loginItem: L("domain.loginItem")
         }
     }
 
@@ -828,7 +924,7 @@ extension LaunchItem.Domain {
         case .userAgent: "~/Library/LaunchAgents"
         case .globalAgent: "/Library/LaunchAgents"
         case .globalDaemon: "/Library/LaunchDaemons"
-        case .loginItem: "系统设置 > 通用 > 登录项与扩展"
+        case .loginItem: L("domain.loginItemLocation")
         }
     }
 }
@@ -837,12 +933,12 @@ extension SignatureInfo {
     var shortDescription: String {
         switch kind {
         case .apple: "Apple"
-        case .appStore: developerName.map { "\($0)（App Store）" } ?? "App Store"
-        case .developerID: developerName ?? teamID ?? "已识别开发者"
-        case .adhoc: "临时签名（ad-hoc）"
-        case .untrusted: "不受信任的证书"
-        case .unsigned: "未签名"
-        case .invalid: "签名无效"
+        case .appStore: developerName.map { L("signature.appStore", $0) } ?? "App Store"
+        case .developerID: developerName ?? teamID ?? L("signature.developerID")
+        case .adhoc: L("signature.adhoc")
+        case .untrusted: L("signature.untrusted")
+        case .unsigned: L("signature.unsigned")
+        case .invalid: L("signature.invalid")
         }
     }
 

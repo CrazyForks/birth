@@ -2,6 +2,18 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.6] - 2026-07-30
+
+### 新增
+
+- **设置窗口**（⌘, 或 App 菜单 → 设置…），首个设置项为语言
+- **语言设置**：跟随系统 / 简体中文 / English——切换后一键重启生效；默认跟随系统，重启提示以目标语言显示（刚选了它的人一定读得懂）
+- **完整英文本地化**：全部界面、空状态、过滤菜单、错误提示、管理员授权弹窗与 TCC 用途说明均支持英文（约 160 条文案，语义 key + 中英对照表，单元测试钉住两表 key 与格式符一致，杜绝漏译与格式漂移）
+
+### 变更
+
+- 发版门禁新增"自包含冒烟"：打包后隐藏构建目录再启动验证，杜绝"只在构建机上能跑"的资源包缺陷混进发布
+
 ## [0.2.5] - 2026-07-30
 
 ### 新增
@@ -82,6 +94,7 @@
 - **全中文界面**（含系统菜单栏，声明 zh-Hans 本地化）
 - **测试与发版设施**：45 个单元测试（含伪装检测与特权命令标记协议回归）；`scripts/release-check.sh` 发版门禁（测试 → 打包 → 冒烟启动 → 进程 / 主线程 / 崩溃三重健康检查）；GitHub Actions CI
 
+[0.2.6]: https://github.com/iAmCorey/birth/releases/tag/v0.2.6
 [0.2.5]: https://github.com/iAmCorey/birth/releases/tag/v0.2.5
 [0.2.4]: https://github.com/iAmCorey/birth/releases/tag/v0.2.4
 [0.2.3]: https://github.com/iAmCorey/birth/releases/tag/v0.2.3

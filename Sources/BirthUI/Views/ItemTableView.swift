@@ -7,7 +7,7 @@ struct ItemTableView: View {
         @Bindable var state = state
         Group {
             if state.isLoading && !state.hasLoadedOnce {
-                ProgressView("正在扫描启动项…")
+                ProgressView(L("advanced.scanning"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if showsFullDiskAccessGuidance {
                 fullDiskAccessGuidance
@@ -27,27 +27,27 @@ struct ItemTableView: View {
     private var emptyState: some View {
         if !state.searchText.isEmpty {
             ContentUnavailableView(
-                "无匹配结果",
+                L("empty.noResults"),
                 systemImage: "magnifyingglass",
-                description: Text("没有与“\(state.searchText)”匹配的项目。")
+                description: Text(L("advanced.empty.noMatch", state.searchText))
             )
         } else if state.anyTableFilterActive {
             ContentUnavailableView(
-                "无匹配结果",
+                L("empty.noResults"),
                 systemImage: "line.3.horizontal.decrease.circle",
                 description: filterEmptyDescription
             )
         } else if state.scopeHidesAllItems {
             ContentUnavailableView(
-                "没有第三方启动项",
+                L("advanced.empty.scopeTitle"),
                 systemImage: "apple.logo",
-                description: Text("此分类下的启动项均来自 Apple。把范围切换为“全部”即可查看。")
+                description: Text(L("advanced.empty.scopeBody"))
             )
         } else {
             ContentUnavailableView(
-                "没有启动项",
+                L("advanced.empty.noneTitle"),
                 systemImage: "moon.zzz",
-                description: Text("此分类下没有注册任何启动项。")
+                description: Text(L("advanced.empty.noneBody"))
             )
         }
     }
@@ -57,11 +57,11 @@ struct ItemTableView: View {
     private var filterEmptyDescription: Text {
         switch (state.runStateFilter, state.enablementFilter) {
         case (.all, let enablement):
-            Text("没有“\(enablement.displayName)”的项目。")
+            Text(L("advanced.empty.noEnablement", enablement.displayName))
         case (let runState, .all):
-            Text("没有处于“\(runState.displayName)”状态的项目。")
+            Text(L("advanced.empty.noRunState", runState.displayName))
         default:
-            Text("没有符合当前过滤条件的项目。")
+            Text(L("advanced.empty.filtered"))
         }
     }
 
@@ -76,20 +76,14 @@ struct ItemTableView: View {
 
     private var fullDiskAccessGuidance: some View {
         ContentUnavailableView {
-            Label("需要一次性授权", systemImage: "lock.shield")
+            Label(L("fda.guide.title"), systemImage: "lock.shield")
         } description: {
-            Text(
-                """
-                登录项数据由 macOS 的后台任务管理数据库提供，读取它需要“完全磁盘访问权限”。
-                在系统设置中勾选 Birth——只需授权一次，之后每次刷新都会静默读取，不会再弹任何窗口。
-                如果列表里 Birth 已经是开启状态，请先关闭再重新开启一次（重新安装后授权需要刷新）。
-                """
-            )
+            Text(L("fda.guide.body"))
         } actions: {
-            Button("打开隐私设置") {
+            Button(L("common.openPrivacySettings")) {
                 state.openFullDiskAccessSettings()
             }
-            Button("已授权，刷新") {
+            Button(L("fda.guide.refreshed")) {
                 Task { await state.refresh() }
             }
         }
@@ -98,26 +92,26 @@ struct ItemTableView: View {
     private var table: some View {
         @Bindable var state = state
         return Table(state.visibleItems, selection: $state.selectedItemID, sortOrder: $state.tableSortOrder) {
-            TableColumn("名称", sortUsing: AppState.TableSortColumn.name.comparator) { item in
+            TableColumn(L("column.name"), sortUsing: AppState.TableSortColumn.name.comparator) { item in
                 NameCell(item: item)
                     .repeatTapTogglesInspector(item)
             }
             .width(min: 220, ideal: 300)
 
-            TableColumn("开发者", sortUsing: AppState.TableSortColumn.developer.comparator) { item in
+            TableColumn(L("column.developer"), sortUsing: AppState.TableSortColumn.developer.comparator) { item in
                 DeveloperCell(item: item)
                     .repeatTapTogglesInspector(item)
             }
             .width(min: 140, ideal: 190)
 
-            TableColumn("类型", sortUsing: AppState.TableSortColumn.kind.comparator) { item in
+            TableColumn(L("column.kind"), sortUsing: AppState.TableSortColumn.kind.comparator) { item in
                 Text(kindText(for: item))
                     .foregroundStyle(.secondary)
                     .repeatTapTogglesInspector(item)
             }
             .width(min: 90, ideal: 110)
 
-            TableColumn("状态", sortUsing: AppState.TableSortColumn.runState.comparator) { item in
+            TableColumn(L("column.status"), sortUsing: AppState.TableSortColumn.runState.comparator) { item in
                 StatusCell(item: item)
                     .repeatTapTogglesInspector(item)
             }
@@ -125,7 +119,7 @@ struct ItemTableView: View {
 
             // Header sort is fine here (the header is not the cell); what
             // stays off is the ROW tap layer below.
-            TableColumn("启用", sortUsing: AppState.TableSortColumn.enablement.comparator) { item in
+            TableColumn(L("column.enabled"), sortUsing: AppState.TableSortColumn.enablement.comparator) { item in
                 // The ONE gesture-free column: its switch must not double
                 // as a pane toggle. Every other (and any future) column
                 // must carry .repeatTapTogglesInspector.
@@ -154,22 +148,22 @@ struct ItemTableView: View {
     @ViewBuilder
     private func contextMenu(for item: LaunchItem) -> some View {
         if let plistURL = item.plistURL {
-            Button("在访达中显示") { state.revealInFinder(plistURL) }
+            Button(L("common.revealInFinder")) { state.revealInFinder(plistURL) }
         }
         if let path = item.executablePath {
-            Button("显示可执行文件") { state.revealInFinder(URL(filePath: path)) }
+            Button(L("advanced.revealExecutable")) { state.revealInFinder(URL(filePath: path)) }
         }
         if item.isUserRemovable {
             Divider()
-            Button("移除…", role: .destructive) { state.itemPendingRemoval = item }
+            Button(L("common.remove"), role: .destructive) { state.itemPendingRemoval = item }
         } else {
-            Button("打开系统设置…") { state.openLoginItemsSettings() }
+            Button(L("common.openSystemSettings")) { state.openLoginItemsSettings() }
         }
     }
 
     private func kindText(for item: LaunchItem) -> String {
         if item.domain == .loginItem {
-            return item.btmTypeDescription.map(Self.localizedBTMType) ?? "登录项"
+            return item.btmTypeDescription.map(Self.localizedBTMType) ?? L("domain.loginItem")
         }
         return item.domain.displayName
     }
@@ -179,10 +173,10 @@ struct ItemTableView: View {
     private static func localizedBTMType(_ raw: String) -> String {
         switch raw.lowercased() {
         case "app": "App"
-        case "login item": "登录项"
-        case "agent": "代理"
-        case "daemon": "守护进程"
-        case "background app refresh": "后台刷新"
+        case "login item": L("domain.loginItem")
+        case "agent": L("btm.agent")
+        case "daemon": L("domain.daemon")
+        case "background app refresh": L("btm.backgroundRefresh")
         default: raw.capitalized
         }
     }
@@ -230,17 +224,17 @@ private struct DeveloperCell: View {
             HStack(spacing: 4) {
                 Image(systemName: "exclamationmark.octagon.fill")
                     .foregroundStyle(.red)
-                Text("伪装系统项")
+                Text(L("badge.masquerade"))
                     .foregroundStyle(.red)
                     .lineLimit(1)
             }
-            .help("标识符声称属于 Apple（com.apple.*），但签名验证不符——这是恶意软件常用的伪装手法。实际签名：\(state.signature(for: item)?.shortDescription ?? "未知")")
+            .help(L("badge.masqueradeHelp", state.signature(for: item)?.shortDescription ?? L("common.unknown")))
         } else if let signature = state.signature(for: item) {
             HStack(spacing: 4) {
                 if !signature.isTrustworthy {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
-                        .help("此可执行文件没有可识别的开发者签名")
+                        .help(L("badge.untrustedHelp"))
                 }
                 Text(signature.shortDescription)
                     .lineLimit(1)
@@ -259,23 +253,23 @@ private struct StatusCell: View {
     var body: some View {
         switch item.runState {
         case .running(let pid):
-            Label("PID \(pid, format: .number.grouping(.never))", systemImage: "circle.fill")
+            Label(L("status.pid", pid), systemImage: "circle.fill")
                 .foregroundStyle(.green)
                 .labelStyle(StatusLabelStyle())
-                .help("正在运行（进程号 \(pid)）")
+                .help(L("status.runningHelp", pid))
         case .loadedIdle:
-            Label("已加载", systemImage: "circle.dotted")
+            Label(L("status.loaded"), systemImage: "circle.dotted")
                 .foregroundStyle(.secondary)
                 .labelStyle(StatusLabelStyle())
-                .help("已加载到 launchd，当前未运行")
+                .help(L("status.loadedHelp"))
         case .notLoaded:
             Text("—")
                 .foregroundStyle(.tertiary)
-                .help("未加载")
+                .help(L("runState.notLoaded"))
         case .unknown:
             Text("—")
                 .foregroundStyle(.tertiary)
-                .help("未能读取运行状态")
+                .help(L("status.unknownHelp"))
         }
     }
 }
@@ -299,7 +293,7 @@ private struct EnabledCell: View {
                 .toggleStyle(.switch)
                 .controlSize(.mini)
                 .disabled(true)
-                .help("由 macOS 管理——请在系统设置 > 通用 > 登录项与扩展中更改")
+                .help(L("enablement.managedHelp"))
         } else {
             EnablementToggle(item: item)
         }

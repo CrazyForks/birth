@@ -15,7 +15,7 @@ public enum ProcessRunner {
         public var errorDescription: String? {
             switch self {
             case .timedOut(let command, let seconds):
-                "\(command) 在 \(Int(seconds)) 秒内未完成，已被强制终止。"
+                L("error.timeout", command, Int(seconds))
             }
         }
     }

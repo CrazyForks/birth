@@ -22,6 +22,11 @@ echo "==> [2/4] package"
 ./scripts/make-app.sh
 
 echo "==> [3/4] smoke launch"
+# Localization bundles must ride inside the app — a build that passes
+# only via the .build path baked into the binary bricks on user machines.
+ls "$APP"/Contents/Resources/birth_*.bundle >/dev/null 2>&1 \
+    || fail "app 内缺少本地化资源包（Contents/Resources/birth_*.bundle）"
+
 # Quit any running instance (path-pinned so a stale /Applications copy
 # can't hijack the name).
 osascript -e "tell application \"$APP\" to quit" 2>/dev/null || true
@@ -33,10 +38,19 @@ crashes_before=$(ls "$CRASH_DIR" 2>/dev/null | grep -c '^Birth-' || true)
 # BIRTH_AUTOTEST=inspector drives the advanced table + inspector path —
 # the route that once crashed on every click. launchctl setenv + open is
 # mandatory: exec-ing the binary from a shell inherits its sandbox.
+#
+# .build is hidden during the smoke so the launch proves the app is
+# SELF-CONTAINED: SwiftPM bakes an absolute .build path into Bundle.module,
+# which silently rescues a broken bundle layout on the build machine and
+# then crashes on every user's machine.
+mv .build .build.smoke-hidden
+trap 'mv .build.smoke-hidden .build 2>/dev/null || true' EXIT
 launchctl setenv BIRTH_AUTOTEST inspector
 open "$APP"
 sleep 12
 launchctl unsetenv BIRTH_AUTOTEST
+mv .build.smoke-hidden .build
+trap - EXIT
 
 echo "==> [4/4] health checks"
 pid=$(pgrep -x Birth) || fail "进程未存活（启动 12 秒后已退出）"

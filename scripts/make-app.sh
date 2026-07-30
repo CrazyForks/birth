@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="${VERSION:-0.2.5}"
+VERSION="${VERSION:-0.2.6}"
 APP=dist/Birth.app
 BUILD_ARGS=(-c release)
 if [[ "${1:-}" == "universal" ]]; then
@@ -21,13 +21,27 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_PATH" "$APP/Contents/MacOS/Birth"
 
+# SPM resource bundles (localized strings): Localization.swift resolves
+# them from Contents/Resources inside a packaged .app. Missing bundles
+# would strand users on raw keys — fail the build loudly, never ship.
+copied=0
+for bundle in "$(dirname "$BIN_PATH")"/birth_*.bundle; do
+    [ -e "$bundle" ] || continue
+    cp -R "$bundle" "$APP/Contents/Resources/"
+    copied=$((copied + 1))
+done
+if [ "$copied" -eq 0 ]; then
+    echo "ERROR: no birth_*.bundle produced by swift build — localization would be broken" >&2
+    exit 1
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
-    <string>zh_CN</string>
+    <string>zh-Hans</string>
     <key>CFBundleExecutable</key>
     <string>Birth</string>
     <key>CFBundleIdentifier</key>
@@ -54,13 +68,24 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <string>MIT License</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Birth 需要通过“系统事件”来添加和移除登录时打开的 App。</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh-Hans</string>
+        <string>en</string>
+    </array>
 </dict>
 </plist>
 PLIST
 
-# Declare Simplified Chinese so framework-provided strings (menu bar,
-# standard dialog buttons) render in Chinese.
-mkdir -p "$APP/Contents/Resources/zh-Hans.lproj"
+# Declare both localizations so framework-provided strings (menu bar,
+# standard dialog buttons) follow the app's language, not just Chinese.
+mkdir -p "$APP/Contents/Resources/zh-Hans.lproj" "$APP/Contents/Resources/en.lproj"
+
+# TCC usage strings follow the app language too; the Chinese original
+# lives in Info.plist itself (the development-region fallback).
+cat > "$APP/Contents/Resources/en.lproj/InfoPlist.strings" <<'STRINGS'
+"NSAppleEventsUsageDescription" = "Birth needs to control System Events to add and remove apps that open at login.";
+STRINGS
 
 echo "==> rendering icon"
 ICONSET=dist/AppIcon.iconset

@@ -15,18 +15,22 @@ public struct BirthApp: App {
         .commands {
             // Custom About panel with the author credit (kooky-style).
             CommandGroup(replacing: .appInfo) {
-                Button("关于 \(BirthInfo.name)") {
+                Button(L("about.title", BirthInfo.name)) {
                     AboutWindowController.shared.show()
                 }
             }
             // Finder-style quick jumps to the two everyday destinations.
             CommandGroup(after: .sidebar) {
                 Divider()
-                Button("启动应用") { AppState.shared.selection = .loginApps }
+                Button(L("sidebar.loginApps")) { AppState.shared.selection = .loginApps }
                     .keyboardShortcut("1", modifiers: .command)
-                Button("全部启动项") { AppState.shared.selection = .all }
+                Button(L("menu.allItems")) { AppState.shared.selection = .all }
                     .keyboardShortcut("2", modifiers: .command)
             }
+        }
+        // System-provided 设置… menu item + ⌘, come with the scene.
+        Settings {
+            SettingsView()
         }
     }
 }

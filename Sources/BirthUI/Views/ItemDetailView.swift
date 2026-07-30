@@ -39,29 +39,29 @@ struct ItemDetailView: View {
     private var details: some View {
         VStack(alignment: .leading, spacing: 10) {
             if state.isMasquerading(item) {
-                Label("标识符伪装成 Apple 系统项（com.apple.*），但签名验证不符。这是恶意软件常用的持久化伪装手法，建议核查其来源。", systemImage: "exclamationmark.octagon.fill")
+                Label(L("detail.masquerade"), systemImage: "exclamationmark.octagon.fill")
                     .font(.callout)
                     .foregroundStyle(.red)
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
             }
-            row("类型") {
+            row(L("column.kind")) {
                 Text(item.domain.displayName)
             }
-            row("位置") {
+            row(L("detail.location")) {
                 Text(item.domain.locationDescription)
                     .foregroundStyle(.secondary)
             }
-            row("状态") {
+            row(L("column.status")) {
                 stateText
             }
             if let signature = state.signature(for: item) {
-                row("开发者") {
+                row(L("column.developer")) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(signature.shortDescription)
                         if let team = signature.teamID {
-                            Text("团队 ID \(team)")
+                            Text(L("detail.teamID", team))
                                 .font(.caption.monospaced())
                                 .foregroundStyle(.secondary)
                         }
@@ -69,20 +69,20 @@ struct ItemDetailView: View {
                 }
             }
             if let path = item.executablePath {
-                row("可执行文件") {
+                row(L("detail.executable")) {
                     pathText(path)
                 }
             }
             if let plistURL = item.plistURL {
-                row("属性列表") {
+                row(L("detail.plist")) {
                     pathText(plistURL.path)
                 }
             }
             if let schedule = item.schedule {
-                row("运行计划") { Text(schedule) }
+                row(L("detail.schedule")) { Text(schedule) }
             }
             if item.runAtLoad || item.keepAlive {
-                row("行为") {
+                row(L("detail.behavior")) {
                     Text(behaviorText)
                         .foregroundStyle(.secondary)
                 }
@@ -93,16 +93,16 @@ struct ItemDetailView: View {
     private var stateText: some View {
         let enabled = item.enablement.isEnabled
         let base = switch item.enablement {
-        case .enabled: "已启用"
-        case .disabled: "已停用"
-        case .managedBySystem(let isOn): isOn ? "已启用（由 macOS 管理）" : "已停用（由 macOS 管理）"
-        case .unknown: "未知"
+        case .enabled: L("enablement.enabled")
+        case .disabled: L("enablement.disabled")
+        case .managedBySystem(let isOn): isOn ? L("enablement.enabledManaged") : L("enablement.disabledManaged")
+        case .unknown: L("common.unknown")
         }
         let runtime = switch item.runState {
-        case .running(let pid): " · 运行中（PID \(pid)）"
-        case .loadedIdle: " · 已加载"
+        case .running(let pid): L("detail.runtimeRunning", pid)
+        case .loadedIdle: L("detail.runtimeLoaded")
         case .notLoaded: ""
-        case .unknown: " · 运行状态未知"
+        case .unknown: L("detail.runtimeUnknown")
         }
         return Text(base + runtime)
             .foregroundStyle(enabled == false ? Color.secondary : Color.primary)
@@ -110,9 +110,10 @@ struct ItemDetailView: View {
 
     private var behaviorText: String {
         var parts: [String] = []
-        if item.runAtLoad { parts.append("加载时立即启动") }
-        if item.keepAlive { parts.append("退出后自动重启") }
-        return parts.joined(separator: "，")
+        if item.runAtLoad { parts.append(L("detail.runAtLoad")) }
+        if item.keepAlive { parts.append(L("detail.keepAlive")) }
+        // The separator is localized too: enumeration commas differ (，vs , ).
+        return parts.joined(separator: L("common.listSeparator"))
     }
 
     private var actions: some View {
@@ -122,21 +123,21 @@ struct ItemDetailView: View {
                     Button {
                         showingPlist = true
                     } label: {
-                        Label("查看属性列表", systemImage: "doc.text.magnifyingglass")
+                        Label(L("detail.viewPlist"), systemImage: "doc.text.magnifyingglass")
                     }
                 }
                 Button(role: .destructive) {
                     state.itemPendingRemoval = item
                 } label: {
-                    Label("移除…", systemImage: "trash")
+                    Label(L("common.remove"), systemImage: "trash")
                 }
             } else {
                 Button {
                     state.openLoginItemsSettings()
                 } label: {
-                    Label("打开系统设置…", systemImage: "gear")
+                    Label(L("common.openSystemSettings"), systemImage: "gear")
                 }
-                Text("登录项只能由 macOS 本身开启或关闭。")
+                Text(L("detail.loginItemNote"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -164,6 +165,6 @@ struct ItemDetailView: View {
                 .foregroundStyle(.link)
         }
         .buttonStyle(.plain)
-        .help("在访达中显示")
+        .help(L("common.revealInFinder"))
     }
 }

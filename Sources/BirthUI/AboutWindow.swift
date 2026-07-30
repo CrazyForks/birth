@@ -12,7 +12,7 @@ struct AboutView: View {
                 .padding(.bottom, 12)
             Text(BirthInfo.name)
                 .font(.system(size: 28, weight: .medium))
-            Text("版本 \(BirthInfo.displayVersion)")
+            Text(L("about.version", BirthInfo.displayVersion))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
@@ -80,7 +80,7 @@ final class AboutWindowController: NSWindowController {
         let host = NSHostingController(rootView: AboutView())
         host.sizingOptions = .preferredContentSize
         let window = NSWindow(contentViewController: host)
-        window.title = "关于 \(BirthInfo.name)"
+        window.title = L("about.title", BirthInfo.name)
         window.styleMask = [.titled, .closable]
         // Name/version live in the content, so hide the titlebar text.
         window.titleVisibility = .hidden

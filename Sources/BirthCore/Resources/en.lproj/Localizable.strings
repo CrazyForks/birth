@@ -1,0 +1,17 @@
+/* BirthCore — English. Keys are semantic; keep in lockstep with zh-Hans. */
+
+"core.enable" = "enable";
+"core.disable" = "disable";
+"prompt.setEnabled" = "Birth wants to %1$@ the startup item “%2$@”.";
+"prompt.remove" = "Birth wants to remove the startup item “%@”.";
+"error.authCanceled" = "Administrator authorization was canceled.";
+"error.launchctlFailed" = "launchctl %1$@ failed: %2$@";
+"error.disabledStillRunning" = "Disabled, but the job's process is still running; it stops completely after you log out or restart.";
+"error.persistFailed" = "Couldn't write the persistent on/off state; nothing was changed.";
+"error.loginItemsManaged" = "Login items are managed by macOS. Change them in System Settings > General > Login Items & Extensions.";
+"error.itemManaged" = "This item is managed by macOS. Change it in System Settings > General > Login Items & Extensions.";
+"error.removedStillRunning" = "Removed, but the job's process is still running; it stops completely after you log out or restart.";
+"error.trashFailed" = "Couldn't move the plist file to the Trash (permission or disk error); nothing was changed.";
+"error.fdaNeeded" = "Can't read the login items database. Grant Birth Full Disk Access in System Settings > Privacy & Security.";
+"error.automationDenied" = "Birth isn't allowed to control System Events. Allow Birth in System Settings > Privacy & Security > Automation.";
+"error.timeout" = "%1$@ didn't finish within %2$lld seconds and was force-terminated.";

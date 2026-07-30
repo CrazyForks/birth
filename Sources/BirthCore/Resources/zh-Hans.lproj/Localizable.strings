@@ -1,0 +1,17 @@
+/* BirthCore — Simplified Chinese (source language). Keys are semantic. */
+
+"core.enable" = "启用";
+"core.disable" = "停用";
+"prompt.setEnabled" = "Birth 想要%@启动项“%@”。";
+"prompt.remove" = "Birth 想要移除启动项“%@”。";
+"error.authCanceled" = "管理员授权已取消。";
+"error.launchctlFailed" = "launchctl %@ 执行失败：%@";
+"error.disabledStillRunning" = "已停用，但该任务的进程仍在运行；注销或重启后将彻底停止。";
+"error.persistFailed" = "无法写入持久化的开关状态，未做任何更改。";
+"error.loginItemsManaged" = "登录项由 macOS 管理，请前往系统设置 > 通用 > 登录项与扩展进行更改。";
+"error.itemManaged" = "此项目由 macOS 管理，请前往系统设置 > 通用 > 登录项与扩展进行更改。";
+"error.removedStillRunning" = "已移除，但该任务的进程仍在运行；注销或重启后将彻底停止。";
+"error.trashFailed" = "无法将 plist 文件移到废纸篓（权限或磁盘错误），未做任何更改。";
+"error.fdaNeeded" = "无法读取登录项数据库。请在系统设置 > 隐私与安全性中授予 Birth“完全磁盘访问权限”。";
+"error.automationDenied" = "Birth 未获准控制“系统事件”。请在系统设置 > 隐私与安全性 > 自动化中允许 Birth。";
+"error.timeout" = "%@ 在 %lld 秒内未完成，已被强制终止。";
