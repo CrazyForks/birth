@@ -15,7 +15,7 @@ Birth is a free, open-source startup item manager for macOS. It gathers every ba
 
 > launchd is PID 1 — every process on your Mac is born from it. Startup items are your Mac's birth rites; Birth lets you decide which ones deserve to stay.
 
-![Birth main window: the Login Apps page with "Open at Login" and "Started Another Way" groups, each item showing its developer signing identity](pic/1.webp)
+![Birth main window: the Login Apps page with "Open at Login" and "Started Another Way" groups, each item showing its developer signing identity](pic/2.webp)
 
 ## Why
 
