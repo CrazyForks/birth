@@ -12,6 +12,12 @@ public struct LaunchItem: Identifiable, Hashable, Sendable {
         case globalDaemon
         /// Background Task Management login items (System Settings > Login Items).
         case loginItem
+
+        /// Case order doubles as the presentation order (sidebar, 类型
+        /// column sort): user things first, system things later.
+        public var sortRank: Int {
+            Self.allCases.firstIndex(of: self) ?? 0
+        }
     }
 
     /// Whether the item is allowed to launch.
@@ -28,6 +34,16 @@ public struct LaunchItem: Identifiable, Hashable, Sendable {
             case .disabled: false
             case .managedBySystem(let enabled): enabled
             case .unknown: nil
+            }
+        }
+
+        /// Sort weight for the 启用 column: on first, off second,
+        /// unknown last — same effective-state grouping the filter uses.
+        public var sortRank: Int {
+            switch isEnabled {
+            case true?: 0
+            case false?: 1
+            case nil: 2
             }
         }
     }
@@ -88,6 +104,16 @@ public struct LaunchItem: Identifiable, Hashable, Sendable {
         case notLoaded
         /// The runtime query itself failed — not the same as notLoaded.
         case unknown
+
+        /// Sort weight for the 状态 column: most alive first, ignorance last.
+        public var sortRank: Int {
+            switch self {
+            case .running: 0
+            case .loadedIdle: 1
+            case .notLoaded: 2
+            case .unknown: 3
+            }
+        }
     }
 
     public var runState: RunState {
@@ -98,6 +124,28 @@ public struct LaunchItem: Identifiable, Hashable, Sendable {
         else if isLoaded { .loadedIdle }
         else if runtimeUnknown { .unknown }
         else { .notLoaded }
+    }
+
+    /// Sort key for the 开发者 column. Populated by two write-through
+    /// points in the UI layer (snapshot landing + the streamed signature
+    /// pass). Apple items need the kind fallback: codesigned ones carry
+    /// developerName "Apple" (CodeSignInspector) but BTM-derived ones
+    /// carry only the kind — without it the two halves of "Apple" sort
+    /// into different buckets. Unsigned / not-yet-verified items sort
+    /// together under the empty string; the column may still DISPLAY a
+    /// kind label ("未签名") for them.
+    public var developerSortName: String {
+        if let name = signature?.developerName { return name }
+        if signature?.kind == .apple { return "Apple" }
+        return ""
+    }
+
+    /// Sort key for the 类型 column: domain groups first, the BTM subtype
+    /// breaks ties inside 登录项 — where every row's domain is .loginItem
+    /// yet the cell shows App / 登录项 / 代理 / 守护进程. Raw English
+    /// subtype keys cluster correctly even though the cell localizes them.
+    public var kindSortKey: String {
+        "\(domain.sortRank)|\(btmTypeDescription?.lowercased() ?? "")"
     }
 
     public init(

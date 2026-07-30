@@ -33,6 +33,7 @@ private func makeItem(
     displayName: String? = nil,
     domain: LaunchItem.Domain = .userAgent,
     executablePath: String? = nil,
+    enablement: LaunchItem.EnablementState = .unknown,
     pid: Int? = nil,
     isLoaded: Bool = false,
     runtimeUnknown: Bool = false
@@ -43,6 +44,7 @@ private func makeItem(
         displayName: displayName ?? label,
         domain: domain,
         executablePath: executablePath,
+        enablement: enablement,
         pid: pid,
         isLoaded: isLoaded,
         runtimeUnknown: runtimeUnknown
@@ -171,7 +173,7 @@ struct AppStateTests {
         box.state.runStateFilter = .loadedIdle
         #expect(box.state.visibleItems.map(\.id) == ["idle"])
         // A failed runtime query must NOT be filed under 未加载 — the
-        // unknown item matches no specific slice, only 全部状态.
+        // unknown item matches no specific slice, only “全部”.
         box.state.runStateFilter = .notLoaded
         #expect(box.state.visibleItems.map(\.id) == ["off"])
 
@@ -194,6 +196,110 @@ struct AppStateTests {
         #expect(box.state.visibleItems.map(\.id) == ["a"])
         box.state.searchText = "updater"
         #expect(box.state.visibleItems.isEmpty)
+    }
+
+    /// unknown enablement matches neither 已启用 nor 已停用 — same honesty
+    /// rule as the run-state filter; managed-by-system state counts by its
+    /// effective on/off.
+    @Test func enablementFilterSlicesByEffectiveState() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+        box.state.items = [
+            makeItem(id: "on", label: "com.vendor.on", enablement: .enabled),
+            makeItem(id: "off", label: "com.vendor.off", enablement: .disabled),
+            makeItem(id: "managed", label: "com.vendor.managed", enablement: .managedBySystem(enabled: true)),
+            makeItem(id: "mystery", label: "com.vendor.mystery"),
+        ]
+        box.state.selection = .all
+
+        box.state.enablementFilter = .enabled
+        #expect(box.state.visibleItems.map(\.id) == ["on", "managed"])
+        box.state.enablementFilter = .disabled
+        #expect(box.state.visibleItems.map(\.id) == ["off"])
+        box.state.enablementFilter = .all
+        #expect(box.state.visibleItems.count == 4)
+    }
+
+    /// Header sort applies to the visible slice; 状态 sorts most-alive
+    /// first with unknown last, and reversing flips it.
+    @Test func tableSortOrderAppliesToVisibleItems() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+        box.state.items = [
+            makeItem(id: "mystery", label: "com.vendor.mystery", runtimeUnknown: true),
+            makeItem(id: "off", label: "com.vendor.off"),
+            makeItem(id: "run", label: "com.vendor.running", pid: 42),
+            makeItem(id: "idle", label: "com.vendor.idle", isLoaded: true),
+        ]
+        box.state.selection = .all
+
+        // Empty sort order = the scan's natural order.
+        #expect(box.state.visibleItems.map(\.id) == ["mystery", "off", "run", "idle"])
+
+        box.state.tableSortOrder = [KeyPathComparator(\LaunchItem.runState.sortRank)]
+        #expect(box.state.visibleItems.map(\.id) == ["run", "idle", "off", "mystery"])
+
+        box.state.tableSortOrder = [KeyPathComparator(\LaunchItem.runState.sortRank, order: .reverse)]
+        #expect(box.state.visibleItems.map(\.id) == ["mystery", "off", "idle", "run"])
+    }
+
+    /// 启用 column sort: on first, off second, unknown last; managed
+    /// items rank by their effective on/off, same as the filter.
+    @Test func enablementSortRanksByEffectiveState() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+        box.state.items = [
+            makeItem(id: "mystery", label: "com.vendor.mystery"),
+            makeItem(id: "off", label: "com.vendor.off", enablement: .disabled),
+            makeItem(id: "managed", label: "com.vendor.managed", enablement: .managedBySystem(enabled: true)),
+            makeItem(id: "on", label: "com.vendor.on", enablement: .enabled),
+        ]
+        box.state.selection = .all
+
+        box.state.tableSortOrder = [KeyPathComparator(\LaunchItem.enablement.sortRank)]
+        #expect(box.state.visibleItems.map(\.id) == ["managed", "on", "off", "mystery"])
+    }
+
+    /// Finder-style: the header sort must survive a relaunch, including
+    /// direction, and unknown stored entries must be dropped, not crash.
+    @Test func tableSortOrderPersistsAcrossInstances() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+        box.state.tableSortOrder = [
+            {
+                var comparator = AppState.TableSortColumn.runState.comparator
+                comparator.order = .reverse
+                return comparator
+            }(),
+            AppState.TableSortColumn.name.comparator,
+        ]
+
+        let revived = AppState(forTesting: box.defaults)
+        #expect(revived.tableSortOrder == box.state.tableSortOrder)
+
+        // Garbage in storage degrades to "no sort", never a crash.
+        box.defaults.set(["nonsense:x", "name:f"], forKey: "tableSortOrder")
+        let tolerant = AppState(forTesting: box.defaults)
+        #expect(tolerant.tableSortOrder == [AppState.TableSortColumn.name.comparator])
+    }
+
+    /// The steady-state hole the streaming write-back alone leaves open:
+    /// a non-user refresh lands fresh items (signature == nil) while every
+    /// path is already cached, so the streaming pass never runs again.
+    /// Landing-point hydration must fill the sort key from the cache —
+    /// otherwise the 开发者 sort dies right after the first toggle-refresh
+    /// while the cells still display names via the dictionary fallback.
+    @Test func landingHydrationFillsSortKeysFromSignatureCache() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+        box.state.signatures["/tmp/docker"] = SignatureInfo(kind: .developerID, developerName: "Docker Inc")
+
+        // Simulate a snapshot landing after the cache is warm.
+        box.state.items = [makeItem(label: "com.docker.helper", executablePath: "/tmp/docker")]
+        #expect(box.state.items[0].developerSortName.isEmpty)
+
+        box.state.hydrateSignaturesFromCache()
+        #expect(box.state.items[0].developerSortName == "Docker Inc")
     }
 
     /// An all-Apple category under the 第三方 scope is hidden, not empty —

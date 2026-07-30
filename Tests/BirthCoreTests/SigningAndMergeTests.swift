@@ -81,6 +81,43 @@ struct MergeTests {
     }
 }
 
+@Suite("Sort keys")
+struct SortKeyTests {
+    /// Apple identity arrives two ways — codesign (developerName "Apple")
+    /// and BTM conversion (kind only) — and both must land in ONE sort
+    /// bucket, or 开发者-sorting the 全部 scope shears Apple items apart.
+    @Test func appleSortsToOneBucketRegardlessOfSource() {
+        let codesigned = LaunchItem(
+            id: "a", label: "com.apple.x", displayName: "x", domain: .globalDaemon,
+            signature: SignatureInfo(kind: .apple, developerName: "Apple")
+        )
+        let btm = LaunchItem(
+            id: "b", label: "com.apple.y", displayName: "y", domain: .loginItem,
+            signature: SignatureInfo(kind: .apple)
+        )
+        #expect(codesigned.developerSortName == "Apple")
+        #expect(btm.developerSortName == "Apple")
+        #expect(LaunchItem(id: "c", label: "c", displayName: "c", domain: .userAgent)
+            .developerSortName.isEmpty)
+    }
+
+    /// Inside 登录项 every row's domain is .loginItem — the BTM subtype
+    /// must break the tie or the 类型 header sorts nothing there.
+    @Test func kindSortKeyBreaksTiesByBTMSubtype() {
+        let app = LaunchItem(
+            id: "a", label: "a", displayName: "a", domain: .loginItem, btmTypeDescription: "app"
+        )
+        let daemon = LaunchItem(
+            id: "d", label: "d", displayName: "d", domain: .loginItem, btmTypeDescription: "daemon"
+        )
+        let agent = LaunchItem(id: "g", label: "g", displayName: "g", domain: .userAgent)
+        #expect(app.kindSortKey != daemon.kindSortKey)
+        #expect(app.kindSortKey < daemon.kindSortKey)
+        // Domain grouping stays primary across the whole table.
+        #expect(agent.kindSortKey < app.kindSortKey)
+    }
+}
+
 @Suite("Masquerade detection")
 struct MasqueradeTests {
     private func item(label: String) -> LaunchItem {

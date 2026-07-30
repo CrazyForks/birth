@@ -91,10 +91,59 @@ final class AppState {
 
         var displayName: String {
             switch self {
-            case .all: "全部状态"
+            case .all: "全部"
             case .running: "运行中"
             case .loadedIdle: "已加载（空闲）"
             case .notLoaded: "未加载"
+            }
+        }
+    }
+
+    /// The five sortable columns, each owning its comparator — the single
+    /// source for the Table's sortUsing declarations AND the persistence
+    /// round-trip. KeyPathComparator itself is not Codable, so the sort
+    /// state is stored as "column:f|r" strings and rebuilt through here;
+    /// matching back relies on the key paths being THESE instances'
+    /// equals, which is why the columns must not build their own.
+    enum TableSortColumn: String, CaseIterable {
+        case name
+        case developer
+        case kind
+        case runState
+        case enablement
+
+        var comparator: KeyPathComparator<LaunchItem> {
+            switch self {
+            case .name: KeyPathComparator(\.displayName, comparator: .localizedStandard)
+            case .developer: KeyPathComparator(\.developerSortName, comparator: .localizedStandard)
+            case .kind: KeyPathComparator(\.kindSortKey)
+            case .runState: KeyPathComparator(\.runState.sortRank)
+            case .enablement: KeyPathComparator(\.enablement.sortRank)
+            }
+        }
+    }
+
+    /// The filter menu's second dimension: enablement. `unknown`
+    /// enablement matches neither specific slice — same honesty rule as
+    /// RunState.unknown.
+    enum EnablementFilter: CaseIterable {
+        case all
+        case enabled
+        case disabled
+
+        func allows(_ enablement: LaunchItem.EnablementState) -> Bool {
+            switch self {
+            case .all: true
+            case .enabled: enablement.isEnabled == true
+            case .disabled: enablement.isEnabled == false
+            }
+        }
+
+        var displayName: String {
+            switch self {
+            case .all: "全部"
+            case .enabled: "已启用"
+            case .disabled: "已停用"
             }
         }
     }
@@ -114,6 +163,26 @@ final class AppState {
     /// Session-scoped like the search text — deliberately not persisted,
     /// so a forgotten filter can't make next week's list look shrunken.
     var runStateFilter: RunStateFilter = .all
+    var enablementFilter: EnablementFilter = .all
+    /// Either filter dimension narrowing the table — drives the filled
+    /// funnel icon and the "filtered, not empty" empty state.
+    var anyTableFilterActive: Bool {
+        runStateFilter != .all || enablementFilter != .all
+    }
+    /// Column sort chosen by clicking table headers; empty = the scan's
+    /// natural order (domain-grouped). Persisted, Finder-style: unlike a
+    /// forgotten filter, a remembered sort hides nothing — it only orders.
+    var tableSortOrder: [KeyPathComparator<LaunchItem>] = [] {
+        didSet {
+            let encoded = tableSortOrder.compactMap { comparator -> String? in
+                guard let column = TableSortColumn.allCases.first(where: {
+                    $0.comparator.keyPath == comparator.keyPath
+                }) else { return nil }
+                return "\(column.rawValue):\(comparator.order == .reverse ? "r" : "f")"
+            }
+            defaults.set(encoded, forKey: "tableSortOrder")
+        }
+    }
     var selectedItemID: LaunchItem.ID? {
         // Selection still drives the pane both ways (click a row → details,
         // click blank space → pane closes), matching the old reflex.
@@ -158,6 +227,15 @@ final class AppState {
 
     /// Executable path -> signature, filled in asynchronously after each refresh.
     var signatures: [String: SignatureInfo] = [:]
+    /// Bumped whenever the signature cache is deliberately invalidated
+    /// (user-initiated refresh). In-flight signature rounds capture the
+    /// value at start and stop writing once it moves on — without this, a
+    /// stale round racing the fresh one could re-plant a pre-swap identity
+    /// into the cleared cache and the fresh items, where the write-back's
+    /// `== nil` guard would then pin it against the current round's
+    /// correction. Identity data feeds the Apple filter and masquerade
+    /// warning, so a stale win is a security-classification error.
+    @ObservationIgnored private var signatureGeneration = 0
     /// Items with an in-flight enable/disable/remove call.
     var busyItemIDs: Set<LaunchItem.ID> = []
     var lastErrorMessage: String?
@@ -200,6 +278,18 @@ final class AppState {
         self.defaults = defaults
         let stored = defaults.string(forKey: "sidebarSelection")
         selection = stored.flatMap(SidebarSection.init(storageValue:)) ?? .loginApps
+        // In-init assignment skips didSet, so restoring doesn't re-write.
+        if let storedSort = defaults.stringArray(forKey: "tableSortOrder") {
+            tableSortOrder = storedSort.compactMap { entry in
+                let parts = entry.split(separator: ":")
+                guard parts.count == 2,
+                      let column = TableSortColumn(rawValue: String(parts[0]))
+                else { return nil }
+                var comparator = column.comparator
+                comparator.order = parts[1] == "r" ? .reverse : .forward
+                return comparator
+            }
+        }
         if let data = defaults.data(forKey: "recentlyRemovedLoginApps"),
            let apps = try? JSONDecoder().decode([LoginApp].self, from: data) {
             recentlyRemovedLoginApps = apps
@@ -239,8 +329,10 @@ final class AppState {
             inSelectedSection(item)
                 && (showAppleItems || !isAppleItem(item))
                 && runStateFilter.allows(item.runState)
+                && enablementFilter.allows(item.enablement)
                 && matchesSearch(item, pidQuery: pidQuery)
         }
+        .sorted(using: tableSortOrder)
     }
 
     private func inSelectedSection(_ item: LaunchItem) -> Bool {
@@ -283,6 +375,13 @@ final class AppState {
         }
     }
 
+    /// The one resolver for an item's signature. Two stores back it:
+    /// `item.signature` is a write-through copy of `signatures[path]`,
+    /// hydrated when a snapshot lands (refresh) and as results stream in
+    /// (loadSignatures) — it exists so sort keys (`developerSortName`)
+    /// work through plain key paths. The dictionary stays authoritative:
+    /// it outlives refreshes as a cache and also serves LoginApp paths,
+    /// which never appear in `items`. Do not drop either side.
     func signature(for item: LaunchItem) -> SignatureInfo? {
         if let signature = item.signature { return signature }
         guard let path = item.executablePath else { return nil }
@@ -346,7 +445,10 @@ final class AppState {
         if userInitiated {
             // A deliberate refresh promises current truth: a path-keyed
             // signature result must not outlive a binary swapped in place.
+            // Bumping the generation makes any in-flight round drop its
+            // remaining (pre-swap) results instead of re-planting them.
             signatures.removeAll()
+            signatureGeneration += 1
         }
         // The two pipelines are independent I/O (launchctl + dir scans vs
         // SFL + codesign) — overlap them so refresh costs max, not sum.
@@ -356,6 +458,13 @@ final class AppState {
         let snapshot = await snapshotTask
         // Fresh data lands immediately; only the spinner is held back.
         items = snapshot.items
+        // Hydrate the fresh items from the signature cache RIGHT HERE, at
+        // the landing point. A non-user refresh keeps the cache, so the
+        // streaming pass below skips every cached path — without this,
+        // item.signature stays nil after the first toggle-refresh and the
+        // 开发者 sort key silently goes blank while the cells (which fall
+        // back to the dictionary) keep looking correct.
+        hydrateSignaturesFromCache()
         loginItemsError = snapshot.loginItemsError
         // A sub-perceptual spin reads as "the button did nothing" — hold
         // the spinner briefly so a deliberate click gets visible work.
@@ -385,6 +494,19 @@ final class AppState {
         }
     }
 
+    /// Write cached signatures through to the items — the landing-point
+    /// half of the invariant documented on signature(for:). The streaming
+    /// half in loadSignatures covers results that arrive after landing.
+    func hydrateSignaturesFromCache() {
+        for index in items.indices {
+            if items[index].signature == nil,
+               let path = items[index].executablePath,
+               let cached = signatures[path] {
+                items[index].signature = cached
+            }
+        }
+    }
+
     private func loadMissingSignatures() async {
         await loadSignatures(
             forPaths: items.compactMap { item in
@@ -396,6 +518,7 @@ final class AppState {
     private func loadSignatures(forPaths candidates: [String]) async {
         let paths = Array(Set(candidates.filter { signatures[$0] == nil }))
         guard !paths.isEmpty else { return }
+        let generation = signatureGeneration
 
         // Cap concurrency: each lookup blocks a thread inside the Security
         // framework, and an unbounded fan-out starves the cooperative pool.
@@ -409,8 +532,22 @@ final class AppState {
             }
             for _ in 0..<4 { addNext() }
             for await (path, signature) in group {
+                guard generation == signatureGeneration else {
+                    // The cache was invalidated mid-round: the remaining
+                    // results describe binaries as they were before the
+                    // swap. Drop them; the fresh round re-verifies.
+                    group.cancelAll()
+                    break
+                }
                 if let signature {
                     signatures[path] = signature
+                    // Write through to the items so sort keys (开发者
+                    // column) see the streamed identity; display keeps
+                    // reading signature(for:) either way.
+                    for index in items.indices
+                    where items[index].executablePath == path && items[index].signature == nil {
+                        items[index].signature = signature
+                    }
                 }
                 addNext()
             }

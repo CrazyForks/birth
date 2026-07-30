@@ -31,11 +31,11 @@ struct ItemTableView: View {
                 systemImage: "magnifyingglass",
                 description: Text("没有与“\(state.searchText)”匹配的项目。")
             )
-        } else if state.runStateFilter != .all {
+        } else if state.anyTableFilterActive {
             ContentUnavailableView(
                 "无匹配结果",
                 systemImage: "line.3.horizontal.decrease.circle",
-                description: Text("没有处于“\(state.runStateFilter.displayName)”状态的项目。")
+                description: filterEmptyDescription
             )
         } else if state.scopeHidesAllItems {
             ContentUnavailableView(
@@ -49,6 +49,19 @@ struct ItemTableView: View {
                 systemImage: "moon.zzz",
                 description: Text("此分类下没有注册任何启动项。")
             )
+        }
+    }
+
+    /// Names the narrowing dimension when exactly one filter is active;
+    /// both at once gets the generic line.
+    private var filterEmptyDescription: Text {
+        switch (state.runStateFilter, state.enablementFilter) {
+        case (.all, let enablement):
+            Text("没有“\(enablement.displayName)”的项目。")
+        case (let runState, .all):
+            Text("没有处于“\(runState.displayName)”状态的项目。")
+        default:
+            Text("没有符合当前过滤条件的项目。")
         }
     }
 
@@ -84,33 +97,35 @@ struct ItemTableView: View {
 
     private var table: some View {
         @Bindable var state = state
-        return Table(state.visibleItems, selection: $state.selectedItemID) {
-            TableColumn("名称") { item in
+        return Table(state.visibleItems, selection: $state.selectedItemID, sortOrder: $state.tableSortOrder) {
+            TableColumn("名称", sortUsing: AppState.TableSortColumn.name.comparator) { item in
                 NameCell(item: item)
                     .repeatTapTogglesInspector(item)
             }
             .width(min: 220, ideal: 300)
 
-            TableColumn("开发者") { item in
+            TableColumn("开发者", sortUsing: AppState.TableSortColumn.developer.comparator) { item in
                 DeveloperCell(item: item)
                     .repeatTapTogglesInspector(item)
             }
             .width(min: 140, ideal: 190)
 
-            TableColumn("类型") { item in
+            TableColumn("类型", sortUsing: AppState.TableSortColumn.kind.comparator) { item in
                 Text(kindText(for: item))
                     .foregroundStyle(.secondary)
                     .repeatTapTogglesInspector(item)
             }
             .width(min: 90, ideal: 110)
 
-            TableColumn("状态") { item in
+            TableColumn("状态", sortUsing: AppState.TableSortColumn.runState.comparator) { item in
                 StatusCell(item: item)
                     .repeatTapTogglesInspector(item)
             }
             .width(min: 70, ideal: 80)
 
-            TableColumn("启用") { item in
+            // Header sort is fine here (the header is not the cell); what
+            // stays off is the ROW tap layer below.
+            TableColumn("启用", sortUsing: AppState.TableSortColumn.enablement.comparator) { item in
                 // The ONE gesture-free column: its switch must not double
                 // as a pane toggle. Every other (and any future) column
                 // must carry .repeatTapTogglesInspector.

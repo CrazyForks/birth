@@ -91,13 +91,19 @@ struct AdvancedItemsView: View {
                             }
                         }
                         .pickerStyle(.inline)
+                        Picker("启用状态", selection: $state.enablementFilter) {
+                            ForEach(AppState.EnablementFilter.allCases, id: \.self) { filter in
+                                Text(filter.displayName).tag(filter)
+                            }
+                        }
+                        .pickerStyle(.inline)
                     } label: {
                         // Mail-style: the icon fills while a filter is
                         // active, so a narrowed list is never a mystery.
-                        Label("按运行状态过滤", systemImage: "line.3.horizontal.decrease.circle")
-                            .symbolVariant(state.runStateFilter == .all ? .none : .fill)
+                        Label("过滤", systemImage: "line.3.horizontal.decrease.circle")
+                            .symbolVariant(state.anyTableFilterActive ? .fill : .none)
                     }
-                    .help("按运行状态过滤：运行中、已加载（空闲）或未加载")
+                    .help("按运行状态或启用状态过滤")
 
                     RefreshToolbarButton()
 
