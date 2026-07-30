@@ -37,6 +37,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        // Pre-click selection snapshot for the repeat-click detector (see
+        // AppState.noteMouseDown). Local monitors fire before the event is
+        // dispatched, i.e. before the table mutates the selection. Lives
+        // here so only the real app — never a test AppState — registers an
+        // app-global input monitor; deliberately never removed.
+        NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            MainActor.assumeIsolated { AppState.shared.noteMouseDown() }
+            return event
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

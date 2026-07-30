@@ -41,18 +41,21 @@ public struct LaunchctlClient: Sendable {
     }
 
     /// Jobs loaded in the current user's session (user + global agents).
-    public func guiSessionRuntime() async -> [String: JobRuntime] {
+    /// nil when the query itself failed — callers must not read that as
+    /// "nothing loaded" (an empty dictionary IS "nothing loaded").
+    public func guiSessionRuntime() async -> [String: JobRuntime]? {
         guard let result = try? await ProcessRunner.run("/bin/launchctl", ["list"]),
               result.succeeded
-        else { return [:] }
+        else { return nil }
         return Self.parseList(result.stdout)
     }
 
     /// Jobs loaded in the system domain (daemons). Readable without root.
-    public func systemRuntime() async -> [String: JobRuntime] {
+    /// nil when the query itself failed, same contract as guiSessionRuntime().
+    public func systemRuntime() async -> [String: JobRuntime]? {
         guard let result = try? await ProcessRunner.run("/bin/launchctl", ["print", "system"]),
               result.succeeded
-        else { return [:] }
+        else { return nil }
         return Self.parsePrintServices(result.stdout)
     }
 

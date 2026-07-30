@@ -43,6 +43,10 @@ public struct LaunchItem: Identifiable, Hashable, Sendable {
     public var pid: Int?
     /// True when we positively know the job is loaded but idle (pid == nil).
     public var isLoaded: Bool
+    /// True when the runtime query for the item's domain failed outright —
+    /// "we don't know" as opposed to "known not loaded". Drives
+    /// `RunState.unknown` so the UI never files ignorance under 未加载.
+    public var runtimeUnknown: Bool
     public var runAtLoad: Bool
     public var keepAlive: Bool
     /// Human-readable schedule summary ("Every 3600s", "Calendar schedule"), if any.
@@ -73,6 +77,29 @@ public struct LaunchItem: Identifiable, Hashable, Sendable {
         domain != .loginItem
     }
 
+    /// Coarse runtime state, derived once from pid/isLoaded — the single
+    /// classification behind the 状态 column, the detail pane's runtime
+    /// suffix, and the run-state filter, so the three can never drift.
+    /// BTM login items carry no launchd runtime state and always land in
+    /// `notLoaded` — factually right: they are not launchd jobs.
+    public enum RunState: Hashable, Sendable {
+        case running(pid: Int)
+        case loadedIdle
+        case notLoaded
+        /// The runtime query itself failed — not the same as notLoaded.
+        case unknown
+    }
+
+    public var runState: RunState {
+        // Positive signals win: a pid is a pid even if some other part of
+        // the query failed. `unknown` is reserved for "no signal at all,
+        // and the query that would have produced one didn't run".
+        if let pid { .running(pid: pid) }
+        else if isLoaded { .loadedIdle }
+        else if runtimeUnknown { .unknown }
+        else { .notLoaded }
+    }
+
     public init(
         id: String,
         label: String,
@@ -83,6 +110,7 @@ public struct LaunchItem: Identifiable, Hashable, Sendable {
         enablement: EnablementState = .unknown,
         pid: Int? = nil,
         isLoaded: Bool = false,
+        runtimeUnknown: Bool = false,
         runAtLoad: Bool = false,
         keepAlive: Bool = false,
         schedule: String? = nil,
@@ -98,6 +126,7 @@ public struct LaunchItem: Identifiable, Hashable, Sendable {
         self.enablement = enablement
         self.pid = pid
         self.isLoaded = isLoaded
+        self.runtimeUnknown = runtimeUnknown
         self.runAtLoad = runAtLoad
         self.keepAlive = keepAlive
         self.schedule = schedule

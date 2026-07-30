@@ -73,6 +73,32 @@ final class AppState {
         }
     }
 
+    /// The advanced table's runtime-state slices (issue #2) — the UI face
+    /// of `LaunchItem.RunState`, which owns the classification itself.
+    enum RunStateFilter: CaseIterable {
+        case all
+        case running
+        case loadedIdle
+        case notLoaded
+
+        func allows(_ state: LaunchItem.RunState) -> Bool {
+            switch (self, state) {
+            case (.all, _), (.running, .running),
+                 (.loadedIdle, .loadedIdle), (.notLoaded, .notLoaded): true
+            default: false
+            }
+        }
+
+        var displayName: String {
+            switch self {
+            case .all: "全部状态"
+            case .running: "运行中"
+            case .loadedIdle: "已加载（空闲）"
+            case .notLoaded: "未加载"
+            }
+        }
+    }
+
     var items: [LaunchItem] = []
     var loginItemsError: String?
     var isLoading = false
@@ -85,7 +111,50 @@ final class AppState {
     }
     var searchText = ""
     var showAppleItems = false
-    var selectedItemID: LaunchItem.ID?
+    /// Session-scoped like the search text — deliberately not persisted,
+    /// so a forgotten filter can't make next week's list look shrunken.
+    var runStateFilter: RunStateFilter = .all
+    var selectedItemID: LaunchItem.ID? {
+        // Selection still drives the pane both ways (click a row → details,
+        // click blank space → pane closes), matching the old reflex.
+        didSet { inspectorPresented = selectedItemID != nil }
+    }
+    /// Detail-pane visibility. Decoupled from the selection because a full
+    /// table leaves no blank space to click: with visibility *derived* from
+    /// the selection, the pane could never be dismissed. The toolbar toggle
+    /// writes this directly; the selection keeps nudging it via didSet.
+    var inspectorPresented = false
+    /// The selection as of the latest left-mouse-down, snapshotted by an
+    /// event monitor BEFORE the table processes the click. Comparing
+    /// against a *pre-click* snapshot is what makes "repeat click" honest:
+    /// pairing a didSet flag with its tap broke whenever a selection
+    /// change arrived without a tap to consume it (the gesture-free 启用
+    /// column, keyboard selection) — the stale flag then swallowed the
+    /// next genuine repeat click.
+    @ObservationIgnored private var selectionAtMouseDown: LaunchItem.ID?
+
+    /// Mouse-down half of the repeat-click detector. The production caller
+    /// is the event monitor AppDelegate installs at launch (NOT here in
+    /// init, so test instances don't each register an app-global input
+    /// monitor); tests replay a down-then-tap click by calling it directly.
+    func noteMouseDown() {
+        selectionAtMouseDown = selectedItemID
+    }
+
+    /// Row-level tap (mouse-up), layered over the table's own mouse-down
+    /// selection: a repeat click on the already-selected row toggles the
+    /// detail pane — 点一次打开，再点一次收起.
+    func rowTapped(_ id: LaunchItem.ID) {
+        if selectedItemID != id {
+            // The gesture won over the table's selection — do both halves.
+            selectedItemID = id
+        } else if selectionAtMouseDown == id {
+            // Already selected when the mouse went down: a repeat click.
+            inspectorPresented.toggle()
+        }
+        // Otherwise this very click performed the selection; the pane just
+        // opened via didSet and must stay open.
+    }
 
     /// Executable path -> signature, filled in asynchronously after each refresh.
     var signatures: [String: SignatureInfo] = [:]
@@ -161,15 +230,34 @@ final class AppState {
     // MARK: - Derived collections
 
     var visibleItems: [LaunchItem] {
-        items.filter { item in
-            switch selection {
-            case .loginApps, .recentlyRemoved: false
-            case .all: true
-            case .domain(let domain): item.domain == domain
-            }
+        // Query-invariant work stays out of the per-item closure: this
+        // recomputes on every signature-stream tick, so the PID query is
+        // parsed once per pass, not once per row. Trim rule matches
+        // matches(query:haystacks:).
+        let pidQuery = Int(searchText.trimmingCharacters(in: .whitespaces))
+        return items.filter { item in
+            inSelectedSection(item)
+                && (showAppleItems || !isAppleItem(item))
+                && runStateFilter.allows(item.runState)
+                && matchesSearch(item, pidQuery: pidQuery)
         }
-        .filter { showAppleItems || !isAppleItem($0) }
-        .filter { matchesSearch($0) }
+    }
+
+    private func inSelectedSection(_ item: LaunchItem) -> Bool {
+        switch selection {
+        case .loginApps, .recentlyRemoved: false
+        case .all: true
+        case .domain(let domain): item.domain == domain
+        }
+    }
+
+    /// True when the current category is empty ONLY because the 第三方
+    /// scope hides its items — the empty state must say so instead of
+    /// pretending nothing is registered. Callers rule out search and the
+    /// run-state filter first; any surviving item here is necessarily
+    /// Apple-signed, or it would still be visible.
+    var scopeHidesAllItems: Bool {
+        !showAppleItems && items.contains { inSelectedSection($0) }
     }
 
     var selectedItem: LaunchItem? {
@@ -220,8 +308,14 @@ final class AppState {
         item.isMasquerading(signature: signature(for: item))
     }
 
-    private func matchesSearch(_ item: LaunchItem) -> Bool {
-        matches(query: searchText, haystacks: [
+    private func matchesSearch(_ item: LaunchItem, pidQuery: Int?) -> Bool {
+        // A numeric query also matches the PID — "which item spawned
+        // process 1234?". Exact match only: substring would make "12"
+        // sweep in every PID that happens to contain 12.
+        if let pidQuery, item.pid == pidQuery {
+            return true
+        }
+        return matches(query: searchText, haystacks: [
             item.displayName,
             item.label,
             item.executablePath ?? "",

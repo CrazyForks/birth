@@ -65,6 +65,20 @@ struct MergeTests {
         #expect(merged.isLoaded)
         #expect(merged.pid == 4242)
     }
+
+    /// A failed runtime query (nil) is "we don't know"; an empty result
+    /// ([:]) is "known not loaded". The two must produce different states —
+    /// filing ignorance under 未加载 would let a broken query masquerade
+    /// as an idle system.
+    @Test func failedRuntimeQueryYieldsUnknownNotNotLoaded() {
+        let unknown = service.merge(item: makeItem(), overrides: [:], runtime: nil)
+        #expect(unknown.runtimeUnknown)
+        #expect(unknown.runState == .unknown)
+
+        let absent = service.merge(item: makeItem(), overrides: [:], runtime: [:])
+        #expect(!absent.runtimeUnknown)
+        #expect(absent.runState == .notLoaded)
+    }
 }
 
 @Suite("Masquerade detection")

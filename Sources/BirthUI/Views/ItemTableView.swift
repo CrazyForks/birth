@@ -12,16 +12,43 @@ struct ItemTableView: View {
             } else if showsFullDiskAccessGuidance {
                 fullDiskAccessGuidance
             } else if state.visibleItems.isEmpty {
-                ContentUnavailableView(
-                    state.searchText.isEmpty ? "没有启动项" : "无匹配结果",
-                    systemImage: state.searchText.isEmpty ? "moon.zzz" : "magnifyingglass",
-                    description: state.searchText.isEmpty
-                        ? Text("此分类下没有注册任何启动项。")
-                        : Text("没有与“\(state.searchText)”匹配的项目。")
-                )
+                emptyState
             } else {
                 table
             }
+        }
+    }
+
+    /// Four reasons the table can be empty, four messages — most specific
+    /// narrowing first: search, run-state filter, the 第三方 scope, and
+    /// only then a genuinely empty category. Nothing that merely *hides*
+    /// items may masquerade as "没有启动项".
+    @ViewBuilder
+    private var emptyState: some View {
+        if !state.searchText.isEmpty {
+            ContentUnavailableView(
+                "无匹配结果",
+                systemImage: "magnifyingglass",
+                description: Text("没有与“\(state.searchText)”匹配的项目。")
+            )
+        } else if state.runStateFilter != .all {
+            ContentUnavailableView(
+                "无匹配结果",
+                systemImage: "line.3.horizontal.decrease.circle",
+                description: Text("没有处于“\(state.runStateFilter.displayName)”状态的项目。")
+            )
+        } else if state.scopeHidesAllItems {
+            ContentUnavailableView(
+                "没有第三方启动项",
+                systemImage: "apple.logo",
+                description: Text("此分类下的启动项均来自 Apple。把范围切换为“全部”即可查看。")
+            )
+        } else {
+            ContentUnavailableView(
+                "没有启动项",
+                systemImage: "moon.zzz",
+                description: Text("此分类下没有注册任何启动项。")
+            )
         }
     }
 
@@ -60,26 +87,33 @@ struct ItemTableView: View {
         return Table(state.visibleItems, selection: $state.selectedItemID) {
             TableColumn("名称") { item in
                 NameCell(item: item)
+                    .repeatTapTogglesInspector(item)
             }
             .width(min: 220, ideal: 300)
 
             TableColumn("开发者") { item in
                 DeveloperCell(item: item)
+                    .repeatTapTogglesInspector(item)
             }
             .width(min: 140, ideal: 190)
 
             TableColumn("类型") { item in
                 Text(kindText(for: item))
                     .foregroundStyle(.secondary)
+                    .repeatTapTogglesInspector(item)
             }
             .width(min: 90, ideal: 110)
 
             TableColumn("状态") { item in
                 StatusCell(item: item)
+                    .repeatTapTogglesInspector(item)
             }
             .width(min: 70, ideal: 80)
 
             TableColumn("启用") { item in
+                // The ONE gesture-free column: its switch must not double
+                // as a pane toggle. Every other (and any future) column
+                // must carry .repeatTapTogglesInspector.
                 EnabledCell(item: item)
             }
             .width(56)
@@ -139,6 +173,20 @@ struct ItemTableView: View {
     }
 }
 
+private extension View {
+    /// Full-width tap layer so a repeat click on the selected row toggles
+    /// the detail pane. Simultaneous, so the table's own mouse-down
+    /// selection keeps working. Every column gets this EXCEPT 启用 — its
+    /// switch must not double as a pane toggle.
+    func repeatTapTogglesInspector(_ item: LaunchItem) -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .simultaneousGesture(TapGesture().onEnded {
+                AppState.shared.rowTapped(item.id)
+            })
+    }
+}
+
 private struct NameCell: View {
     private var state: AppState { .shared }
     let item: LaunchItem
@@ -194,19 +242,25 @@ private struct StatusCell: View {
     let item: LaunchItem
 
     var body: some View {
-        if let pid = item.pid {
+        switch item.runState {
+        case .running(let pid):
             Label("PID \(pid, format: .number.grouping(.never))", systemImage: "circle.fill")
                 .foregroundStyle(.green)
                 .labelStyle(StatusLabelStyle())
                 .help("正在运行（进程号 \(pid)）")
-        } else if item.isLoaded {
+        case .loadedIdle:
             Label("已加载", systemImage: "circle.dotted")
                 .foregroundStyle(.secondary)
                 .labelStyle(StatusLabelStyle())
                 .help("已加载到 launchd，当前未运行")
-        } else {
+        case .notLoaded:
             Text("—")
                 .foregroundStyle(.tertiary)
+                .help("未加载")
+        case .unknown:
+            Text("—")
+                .foregroundStyle(.tertiary)
+                .help("未能读取运行状态")
         }
     }
 }

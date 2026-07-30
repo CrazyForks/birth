@@ -98,7 +98,12 @@ struct ItemDetailView: View {
         case .managedBySystem(let isOn): isOn ? "已启用（由 macOS 管理）" : "已停用（由 macOS 管理）"
         case .unknown: "未知"
         }
-        let runtime = item.pid.map { " · 运行中（PID \($0)）" } ?? (item.isLoaded ? " · 已加载" : "")
+        let runtime = switch item.runState {
+        case .running(let pid): " · 运行中（PID \(pid)）"
+        case .loadedIdle: " · 已加载"
+        case .notLoaded: ""
+        case .unknown: " · 运行状态未知"
+        }
         return Text(base + runtime)
             .foregroundStyle(enabled == false ? Color.secondary : Color.primary)
     }

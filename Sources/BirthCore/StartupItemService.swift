@@ -64,13 +64,19 @@ public struct StartupItemService: Sendable {
         return Snapshot(items: items, loginItemsError: loginItemsError)
     }
 
-    func merge(item: LaunchItem, overrides: [String: Bool], runtime: [String: JobRuntime]) -> LaunchItem {
+    func merge(item: LaunchItem, overrides: [String: Bool], runtime: [String: JobRuntime]?) -> LaunchItem {
         var item = item
         if let isDisabled = overrides[item.label] {
             item.enablement = isDisabled ? .disabled : .enabled
         } else if item.enablement == .unknown {
             // No override recorded and no Disabled key in the plist: launchd's default.
             item.enablement = .enabled
+        }
+        guard let runtime else {
+            // The domain's runtime query failed: absence of evidence, not
+            // evidence of absence — mark it so the UI can't claim 未加载.
+            item.runtimeUnknown = true
+            return item
         }
         if let jobRuntime = runtime[item.label] {
             item.isLoaded = true

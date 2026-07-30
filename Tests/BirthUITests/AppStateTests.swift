@@ -32,14 +32,20 @@ private func makeItem(
     label: String,
     displayName: String? = nil,
     domain: LaunchItem.Domain = .userAgent,
-    executablePath: String? = nil
+    executablePath: String? = nil,
+    pid: Int? = nil,
+    isLoaded: Bool = false,
+    runtimeUnknown: Bool = false
 ) -> LaunchItem {
     LaunchItem(
         id: id,
         label: label,
         displayName: displayName ?? label,
         domain: domain,
-        executablePath: executablePath
+        executablePath: executablePath,
+        pid: pid,
+        isLoaded: isLoaded,
+        runtimeUnknown: runtimeUnknown
     )
 }
 
@@ -122,6 +128,187 @@ struct AppStateTests {
         #expect(box.state.visibleItems.count == 1)
         box.state.searchText = "nonexistent"
         #expect(box.state.visibleItems.isEmpty)
+    }
+
+    /// Issue #2: a numeric query finds "which item spawned process N" —
+    /// exact PID match only, so short numbers don't sweep in unrelated
+    /// PIDs, while text fields keep their substring behavior.
+    @Test func numericSearchMatchesPIDExactlyNotBySubstring() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+        box.state.items = [
+            makeItem(id: "a", label: "com.vendor.alpha", pid: 1234),
+            makeItem(id: "b", label: "com.vendor.beta", pid: 987),
+        ]
+        box.state.selection = .all
+
+        box.state.searchText = "1234"
+        #expect(box.state.visibleItems.map(\.id) == ["a"])
+
+        // A PID prefix is not a hit…
+        box.state.searchText = "12"
+        #expect(box.state.visibleItems.isEmpty)
+
+        // …but the same digits still hit text fields by substring.
+        box.state.items.append(makeItem(id: "c", label: "com.vendor.tool12"))
+        #expect(box.state.visibleItems.map(\.id) == ["c"])
+    }
+
+    @Test func runStateFilterSlicesByRuntime() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+        box.state.items = [
+            makeItem(id: "run", label: "com.vendor.running", pid: 42),
+            makeItem(id: "idle", label: "com.vendor.idle", isLoaded: true),
+            makeItem(id: "off", label: "com.vendor.off"),
+            makeItem(id: "mystery", label: "com.vendor.mystery", runtimeUnknown: true),
+        ]
+        box.state.selection = .all
+
+        #expect(box.state.visibleItems.count == 4)
+        box.state.runStateFilter = .running
+        #expect(box.state.visibleItems.map(\.id) == ["run"])
+        box.state.runStateFilter = .loadedIdle
+        #expect(box.state.visibleItems.map(\.id) == ["idle"])
+        // A failed runtime query must NOT be filed under 未加载 — the
+        // unknown item matches no specific slice, only 全部状态.
+        box.state.runStateFilter = .notLoaded
+        #expect(box.state.visibleItems.map(\.id) == ["off"])
+
+        // Sidebar badges show category totals — the filter, like the
+        // search text, must not shrink them.
+        #expect(box.state.count(for: .all) == 4)
+    }
+
+    @Test func runStateFilterCombinesWithSearch() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+        box.state.items = [
+            makeItem(id: "a", label: "com.docker.helper", pid: 7),
+            makeItem(id: "b", label: "com.docker.updater"),
+        ]
+        box.state.selection = .all
+        box.state.runStateFilter = .running
+
+        box.state.searchText = "docker"
+        #expect(box.state.visibleItems.map(\.id) == ["a"])
+        box.state.searchText = "updater"
+        #expect(box.state.visibleItems.isEmpty)
+    }
+
+    /// An all-Apple category under the 第三方 scope is hidden, not empty —
+    /// the empty state must be able to tell the two apart.
+    @Test func scopeEmptyStateDetectsHiddenAppleItems() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+        box.state.selection = .all
+        box.state.items = [makeItem(id: "sys", label: "com.apple.service")]
+        #expect(box.state.visibleItems.isEmpty)
+        #expect(box.state.scopeHidesAllItems)
+
+        // Scope switched to 全部: nothing is hidden by scope anymore.
+        box.state.showAppleItems = true
+        #expect(!box.state.scopeHidesAllItems)
+
+        // The hidden item must be in the SELECTED category to count.
+        box.state.showAppleItems = false
+        box.state.selection = .domain(.userAgent)
+        box.state.items = [makeItem(id: "sys", label: "com.apple.service", domain: .globalDaemon)]
+        #expect(!box.state.scopeHidesAllItems)
+
+        // A genuinely empty category stays "empty", not "hidden".
+        box.state.items = []
+        box.state.selection = .all
+        #expect(!box.state.scopeHidesAllItems)
+    }
+
+    /// The pane opens on selection and closes on deselection, but a manual
+    /// close (toolbar toggle) must stick without clearing the selection —
+    /// visibility derived purely from the selection was undismissable when
+    /// the table left no blank space to click.
+    @Test func inspectorFollowsSelectionButClosesIndependently() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+        #expect(!box.state.inspectorPresented)
+
+        box.state.selectedItemID = "a"
+        #expect(box.state.inspectorPresented)
+
+        // Toolbar toggle: pane closes, row stays selected.
+        box.state.inspectorPresented = false
+        #expect(box.state.selectedItemID == "a")
+
+        // Clicking blank space (deselect) keeps the pane closed.
+        box.state.selectedItemID = nil
+        #expect(!box.state.inspectorPresented)
+    }
+
+    /// 点一次打开、再点一次收起, judged against the pre-click selection
+    /// snapshot: a click whose mouse-down found the row already selected
+    /// is a repeat click and toggles; the click that did the selecting
+    /// leaves the pane open.
+    @Test func repeatRowClickTogglesInspector() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+
+        // Click 1 on "a": snapshot (nothing selected) → table selects → tap.
+        box.state.noteMouseDown()
+        box.state.selectedItemID = "a"
+        box.state.rowTapped("a")
+        #expect(box.state.inspectorPresented)
+
+        // Click 2, same row: snapshot says already selected → toggles shut,
+        // row stays selected.
+        box.state.noteMouseDown()
+        box.state.rowTapped("a")
+        #expect(!box.state.inspectorPresented)
+        #expect(box.state.selectedItemID == "a")
+
+        // Click 3 reopens.
+        box.state.noteMouseDown()
+        box.state.rowTapped("a")
+        #expect(box.state.inspectorPresented)
+
+        // Moving to another row is a plain selection, never a toggle.
+        box.state.noteMouseDown()
+        box.state.selectedItemID = "b"
+        box.state.rowTapped("b")
+        #expect(box.state.inspectorPresented)
+    }
+
+    /// The reported bug: clicking the gesture-free 启用 column's blank
+    /// area selects the row (pane opens) but produces no tap. The NEXT
+    /// click on any other column must close the pane immediately — the
+    /// old flag-pairing design swallowed it.
+    @Test func gestureFreeColumnClickDoesNotSwallowNextRepeatClick() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+
+        // Click on the 启用 column blank area: selection, no tap.
+        box.state.noteMouseDown()
+        box.state.selectedItemID = "a"
+        #expect(box.state.inspectorPresented)
+
+        // Next click on a gesture column of the same row: closes at once.
+        box.state.noteMouseDown()
+        box.state.rowTapped("a")
+        #expect(!box.state.inspectorPresented)
+    }
+
+    /// If the tap ever outruns the table's own selection, it must do both
+    /// halves itself: select first, toggle only on a genuine repeat.
+    @Test func rowTapAloneSelectsThenToggles() {
+        let box = StateBox()
+        defer { box.cleanUp() }
+
+        box.state.noteMouseDown()
+        box.state.rowTapped("a")
+        #expect(box.state.selectedItemID == "a")
+        #expect(box.state.inspectorPresented)
+
+        box.state.noteMouseDown()
+        box.state.rowTapped("a")
+        #expect(!box.state.inspectorPresented)
     }
 
     /// Restorable rows require the app to still exist on disk and to be

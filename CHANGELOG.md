@@ -2,6 +2,22 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.4] - 2026-07-30
+
+### 新增
+
+- **运行状态过滤**（[#2](https://github.com/iAmCorey/birth/issues/2)）：高级启动项工具栏新增过滤菜单——全部状态 / 运行中 / 已加载（空闲）/ 未加载，过滤生效时图标变为实心提示；仅影响表格与计数副标题，侧边栏徽章保持分类总量
+- **PID 搜索**（[#2](https://github.com/iAmCorey/birth/issues/2)）：搜索框输入进程号即可定位"这个进程是哪个启动项拉起的"——PID 走精确匹配（"12"不会误中 PID 1234），名称、开发者、路径照常子串匹配
+- **详情面板可收起**：再次点击已选中的行即可收起（再点又展开）；工具栏新增切换按钮（⌥⌘I），收起后行选中保持不丢
+
+### 变更
+
+- 空表格文案如实区分四种原因：搜索无结果 / 过滤无结果 / "第三方"范围隐藏了本分类全部的 Apple 项 / 分类确实为空——凡是"被隐藏"都不再冒充"没有启动项"
+
+### 修复
+
+- 运行时查询（launchctl）失败时，启动项不再被错误归为"未加载"，而是如实显示"运行状态未知"，也不会落入任何具体状态的过滤结果——查询失败是"不知道"，不是"没加载"
+
 ## [0.2.3] - 2026-07-23
 
 ### 修复
@@ -50,6 +66,8 @@
 - **全中文界面**（含系统菜单栏，声明 zh-Hans 本地化）
 - **测试与发版设施**：45 个单元测试（含伪装检测与特权命令标记协议回归）；`scripts/release-check.sh` 发版门禁（测试 → 打包 → 冒烟启动 → 进程 / 主线程 / 崩溃三重健康检查）；GitHub Actions CI
 
+[0.2.4]: https://github.com/iAmCorey/birth/releases/tag/v0.2.4
+[0.2.3]: https://github.com/iAmCorey/birth/releases/tag/v0.2.3
 [0.2.2]: https://github.com/iAmCorey/birth/releases/tag/v0.2.2
 [0.2.1]: https://github.com/iAmCorey/birth/releases/tag/v0.2.1
 [0.2.0]: https://github.com/iAmCorey/birth/releases/tag/v0.2.0

@@ -74,7 +74,7 @@ struct AdvancedItemsView: View {
         ItemTableView()
             .navigationTitle(state.selection.displayTitle)
             .navigationSubtitle("共 \(state.visibleItems.count) 项")
-            .searchable(text: $state.searchText, placement: .toolbar, prompt: "名称、开发者或路径")
+            .searchable(text: $state.searchText, placement: .toolbar, prompt: "名称、开发者、路径或 PID")
             .toolbar {
                 ToolbarItemGroup {
                     Picker("范围", selection: $state.showAppleItems) {
@@ -84,7 +84,30 @@ struct AdvancedItemsView: View {
                     .pickerStyle(.segmented)
                     .help("“第三方”只显示非 Apple 的启动项；“全部”包含 macOS 自带的系统服务")
 
+                    Menu {
+                        Picker("运行状态", selection: $state.runStateFilter) {
+                            ForEach(AppState.RunStateFilter.allCases, id: \.self) { filter in
+                                Text(filter.displayName).tag(filter)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                    } label: {
+                        // Mail-style: the icon fills while a filter is
+                        // active, so a narrowed list is never a mystery.
+                        Label("按运行状态过滤", systemImage: "line.3.horizontal.decrease.circle")
+                            .symbolVariant(state.runStateFilter == .all ? .none : .fill)
+                    }
+                    .help("按运行状态过滤：运行中、已加载（空闲）或未加载")
+
                     RefreshToolbarButton()
+
+                    Button {
+                        state.inspectorPresented.toggle()
+                    } label: {
+                        Label("显示或隐藏详情", systemImage: "sidebar.trailing")
+                    }
+                    .keyboardShortcut("i", modifiers: [.command, .option])
+                    .help("显示或隐藏详情面板（⌥⌘I）")
                 }
             }
             .alert("缺少“完全磁盘访问权限”", isPresented: $state.showFullDiskAccessPrompt) {
@@ -95,18 +118,21 @@ struct AdvancedItemsView: View {
             } message: {
                 Text("其余分类均已正常刷新，只有“登录项”分类需要该权限才能读取。授权一次即可——之后每次刷新都会静默包含登录项，不再出现本提示。授权后切回 Birth 会自动刷新。")
             }
-            .inspector(isPresented: inspectorShown) {
-                if let item = state.selectedItem {
-                    ItemDetailView(item: item)
-                        .inspectorColumnWidth(min: 300, ideal: 340)
+            .inspector(isPresented: $state.inspectorPresented) {
+                Group {
+                    if let item = state.selectedItem {
+                        ItemDetailView(item: item)
+                    } else {
+                        // Reachable only via the toolbar toggle with nothing
+                        // selected — row clicks always land on the branch above.
+                        ContentUnavailableView {
+                            Label("未选择项目", systemImage: "info.circle")
+                        } description: {
+                            Text("在列表中选择一项即可查看详情。")
+                        }
+                    }
                 }
+                .inspectorColumnWidth(min: 300, ideal: 340)
             }
-    }
-
-    private var inspectorShown: Binding<Bool> {
-        Binding(
-            get: { state.selectedItemID != nil },
-            set: { if !$0 { state.selectedItemID = nil } }
-        )
     }
 }
