@@ -1,5 +1,7 @@
 # Birth
 
+**English** | [简体中文](README_CN.md)
+
 [![CI](https://img.shields.io/github/actions/workflow/status/iAmCorey/birth/ci.yml?style=flat-square&label=CI)](https://github.com/iAmCorey/birth/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/iAmCorey/birth?style=flat-square)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/iAmCorey/birth?style=flat-square)](https://github.com/iAmCorey/birth/releases/latest)
@@ -7,69 +9,71 @@
 [![Downloads](https://img.shields.io/github/downloads/iAmCorey/birth/total?style=flat-square)](https://github.com/iAmCorey/birth/releases)
 [![Stars](https://img.shields.io/github/stars/iAmCorey/birth?style=flat-square)](https://github.com/iAmCorey/birth/stargazers)
 
-**一目了然地管理你的电脑启动项。**
+**Manage your Mac's startup items at a glance.**
 
-Birth 是一款免费开源的 macOS 启动项管理工具。它把系统里每一个后台项、守护进程和登录项收进同一个窗口，告诉你*是谁装的*（代码签名身份）、现在有没有在运行，并让你一键停用或移除。
+Birth is a free, open-source startup item manager for macOS. It gathers every background item, daemon, and login item on your system into one window, tells you *who put it there* (code-signing identity) and whether it's running right now — and lets you disable or remove any of them with one click.
 
-> launchd 是 PID 1——所有进程都由它而生。启动项就是 Mac 的"出生仪式"，Birth 让你决定哪些有资格留下。
+> launchd is PID 1 — every process on your Mac is born from it. Startup items are your Mac's birth rites; Birth lets you decide which ones deserve to stay.
 
-![Birth 主界面：启动应用页——"登录时打开"与"其他方式自启"两个分组，每项带开发者签名身份](pic/1.webp)
+![Birth main window: the Login Apps page with "Open at Login" and "Started Another Way" groups, each item showing its developer signing identity](pic/1.webp)
 
-## 为什么需要它
+## Why
 
-macOS 把启动项分散在至少四套机制里：
+macOS scatters startup items across at least four mechanisms:
 
-| 来源 | 里面住着什么 | 系统设置显示吗 |
+| Source | What lives there | Shown in System Settings? |
 |---|---|---|
-| `~/Library/LaunchAgents` | 当前用户的后台项 | 只显示为语焉不详的"后台项目" |
-| `/Library/LaunchAgents` | 所有用户的后台项 | 同上 |
-| `/Library/LaunchDaemons` | root 守护进程 | 同上 |
-| BTM 登录项 | "登录时打开"的 App | 显示，但没有路径、没有细节 |
+| `~/Library/LaunchAgents` | The current user's background items | Only as a vague "background items" |
+| `/Library/LaunchAgents` | Background items for all users | Same |
+| `/Library/LaunchDaemons` | Root daemons | Same |
+| BTM login items | "Open at Login" apps | Yes, but no paths, no details |
 
-系统设置不会告诉你 plist 在哪、指向哪个可执行文件、由谁签名——而第三方的更新器、辅助进程和赖着不走的卸载残留，正是仰仗这种不透明。Birth 负责撕掉它。
+System Settings won't tell you where the plist lives, which executable it points to, or who signed it — and third-party updaters, helper processes, and uninstall leftovers thrive on exactly that opacity. Birth tears it off.
 
-## 功能
+## Features
 
-### 启动应用（日常）
+### Login Apps (everyday)
 
-- **零授权查看**"登录时打开"列表——打开即用，不弹任何授权框
-- 添加 / 移除登录 App（首次修改时才请求一次"自动化"授权）；也可以直接把 App **拖进窗口**添加
-- 每个 App 显示**开发者签名身份**，以及它顺手装进系统的后台组件（"+N 后台项"徽章，点击直达）
-- **最近移除**记录：移除的 App 保留在侧边栏专属页面，一键"重新启用"
+- **Zero-permission viewing** of the "Open at Login" list — works the moment you open the app, no prompts
+- Add / remove login apps (a one-time Automation permission is requested only on your first change); you can also just **drag an app into the window**
+- Every app shows its **developer signing identity**, plus the background pieces it quietly installed alongside itself (a "+N items" badge, one click away)
+- **Recently Removed**: removed apps stay on a dedicated sidebar page, one click to re-enable
 
-### 高级启动项（审计）
+### Advanced (audit)
 
-- 四层全景：用户后台项 / 全局后台项 / 守护进程 / 登录项，默认只看第三方，一键切换"全部"
-- **签名身份经证书链锚点验证**：Apple / App Store / 已识别开发者 / 不受信任的证书 / 临时签名 / 未签名 / 签名无效
-- **伪装检测**：标识符冒充 `com.apple.*` 但签名验证不符的项目，会被红色"伪装系统项"标出——这是恶意软件最常用的持久化伪装手法
-- 实时运行状态（PID）、一键启停（用户级免密；守护进程走 macOS 标准管理员授权）
-- **安全删除**：任务先停止，plist 移入废纸篓，并在 `~/Library/Application Support/Birth/Backups` 保留备份
-- 属性列表查看器（二进制 plist 自动转为可读 XML）
+- Four layers in one view: user agents / global agents / daemons / login items — third-party only by default, one click to include everything
+- **Signing identities verified against certificate-chain anchors**: Apple / App Store / Identified Developer / Untrusted Certificate / Ad-hoc / Unsigned / Invalid
+- **Masquerade detection**: items claiming `com.apple.*` whose signature disproves it get a red "Masquerading" badge — the most common malware persistence disguise
+- Live run state (PID) and one-click enable/disable (password-free for user-level items; daemons go through the standard macOS administrator prompt)
+- **Search & locate**: by name, developer, or path; type a PID and get an instant answer to "which startup item spawned this process"
+- **Filter & sort**: filter by run state (running / loaded / not loaded) and enablement; click any of the five column headers to sort — the sort column and direction are remembered, Finder-style
+- **Safe removal**: the job is stopped first, its plist goes to the Trash, and a backup is kept in `~/Library/Application Support/Birth/Backups`
+- Property-list viewer (binary plists rendered as readable XML)
 
-## 权限设计：用到才要，要一次就够
+## Permissions: asked when needed, once
 
-| 操作 | 所需权限 | 时机 |
+| Action | Permission | When |
 |---|---|---|
-| 查看"启动应用"列表 | 无 | — |
-| 浏览用户后台项 / 全局后台项 / 守护进程 | 无 | — |
-| 启停用户后台项 / 全局后台项 | 无 | — |
-| 添加 / 移除启动应用 | 自动化（系统事件） | 首次修改时弹一次 |
-| 查看"登录项"分类 | 完全磁盘访问权限 | 系统设置勾选一次，永久生效 |
-| 启停守护进程；删除全局后台项 / 守护进程 | 管理员密码 | 每次操作（macOS 安全模型强制） |
+| View the Login Apps list | None | — |
+| Browse user agents / global agents / daemons | None | — |
+| Enable/disable user & global agents | None | — |
+| Add / remove login apps | Automation (System Events) | One prompt on first change |
+| View the Login Items category | Full Disk Access | Checked once in System Settings |
+| Enable/disable daemons; remove global items | Administrator password | Every operation (macOS security model) |
 
-缺少权限时功能优雅降级：界面内有一次性授权引导，授权后切回 Birth 自动刷新，之后所有操作静默进行。
+Missing permissions degrade gracefully: one-time setup guidance in the app, an automatic refresh when you come back from System Settings, and silence from then on.
 
-## 安装
+## Install
 
-要求 macOS 14（Sonoma）及以上。目前主要在 macOS 26 上开发与测试；更早版本遇到问题欢迎提 [Issue](https://github.com/iAmCorey/birth/issues)。
+Requires macOS 14 (Sonoma) or later. Primarily developed and tested on macOS 26; if you hit problems on earlier versions, please file an [issue](https://github.com/iAmCorey/birth/issues).
 
-### 方式一：下载 DMG
+### Option 1: DMG
 
-从 [Releases](https://github.com/iAmCorey/birth/releases) 下载最新的 `Birth-x.x.x.dmg`，打开后把 Birth 拖进"应用程序"。
+Download the latest `Birth-x.x.x.dmg` from [Releases](https://github.com/iAmCorey/birth/releases) and drag Birth into Applications.
 
-Birth 是个人开源项目，未经 Apple 公证。**首次打开**时 macOS 会提示无法验证开发者：前往 系统设置 → 隐私与安全性，在页面底部点击**"仍要打开"**——只需一次。
+Birth is a personal open-source project and is not notarized by Apple. On **first launch**, macOS will warn that the developer can't be verified: go to System Settings → Privacy & Security and click **"Open Anyway"** at the bottom of the page — once.
 
-### 方式二：从源码构建
+### Option 2: Build from source
 
 ```bash
 git clone https://github.com/iAmCorey/birth.git
@@ -78,45 +82,45 @@ cd birth
 open dist/Birth.app
 ```
 
-（Homebrew cask 计划中。）
+(A Homebrew cask is planned.)
 
-## 开发
-
-```bash
-swift test                    # 单元测试
-./scripts/release-check.sh    # 发版门禁：测试 → 打包 → 冒烟启动 → 健康检查
-./scripts/make-dmg.sh         # 打包分发用 DMG
-```
-
-- SwiftUI + Swift Package Manager，无 Xcode 工程文件，零第三方依赖
-- 三个 target：`BirthCore`（扫描/控制/签名，UI 无关）、`BirthUI`（完整应用，可测试）、`Birth`（三行 main 的薄壳）
-- 每次发版前必须跑一遍 `release-check.sh`，任何一步红灯都不发布
-
-## 说明与限制
-
-- **签名徽章显示的是身份，不是完整性**：Birth 验证证书链锚点（确认"是谁签的"），不做全量内容哈希校验——那是 Gatekeeper 的职责。
-- **"登录项"分类只读**：macOS 未向第三方开放切换这类项目的 API，Birth 提供直达系统设置的跳转。
-- Birth 目前使用临时（ad-hoc）签名，每个构建的签名身份都不同。**升级到新版本后，完全磁盘访问权限与自动化授权需要在系统设置中重新勾选**（把 Birth 的开关先关后开）。同一个版本内授权一次持续有效。
-
-## 卸载
-
-把 Birth.app 移到废纸篓即可。想清理得更彻底（可选）：
+## Development
 
 ```bash
-defaults delete dev.birth.Birth                            # 偏好设置
-rm -rf ~/Library/Application\ Support/Birth                # 删除操作的备份
+swift test                    # unit tests
+./scripts/release-check.sh    # release gate: tests → package → self-contained smoke launch → health checks
+./scripts/make-dmg.sh         # distribution DMG
 ```
 
-别忘了在 系统设置 → 隐私与安全性 中移除授予 Birth 的权限。
+- SwiftUI + Swift Package Manager — no Xcode project file, zero third-party dependencies
+- Three targets: `BirthCore` (scanning/control/signing, UI-free), `BirthUI` (the whole app, testable), `Birth` (a three-line main)
+- `release-check.sh` must pass before every release — one red light and it doesn't ship
 
-## 反馈
+## Notes & limitations
 
-Bug 与建议请提 [GitHub Issues](https://github.com/iAmCorey/birth/issues)。
+- **The signing badge shows identity, not integrity**: Birth verifies certificate-chain anchors ("who signed this"); it does not hash the full bundle contents — that's Gatekeeper's job.
+- **The Login Items category is read-only**: macOS offers no third-party API to toggle these items, so Birth gives you a one-click jump to System Settings instead.
+- Birth currently ships with an ad-hoc signature, which changes with every build. **After upgrading, Full Disk Access and Automation permissions must be re-granted in System Settings** (toggle Birth off and back on). Within a single version, a grant persists.
+
+## Uninstall
+
+Move Birth.app to the Trash. For a deeper clean (optional):
+
+```bash
+defaults delete dev.birth.Birth                            # preferences
+rm -rf ~/Library/Application\ Support/Birth                # removal backups
+```
+
+Don't forget to remove Birth's permissions in System Settings → Privacy & Security.
+
+## Feedback
+
+Bugs and ideas → [GitHub Issues](https://github.com/iAmCorey/birth/issues).
 
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/chart?repos=iAmCorey/birth&type=date&legend=top-left&sealed_token=hIIjaB8VdxTXapQfdFESc9Lj0qVmiw8GcYReRfu82miGgvHJurKJxrmcz4kK5Xx3015mDNMlofNWyNeyWnYsNaOyHBodWt2cDNzZVAH2Oc6nrkg_RFTkcA)](https://www.star-history.com/?type=date&repos=iAmCorey%2Fbirth)
 
-## 许可证
+## License
 
 [MIT](LICENSE)
