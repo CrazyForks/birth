@@ -60,7 +60,19 @@ public enum CodeSignInspector {
         }
         if satisfies(code, requirement: "anchor apple generic", flags: identityOnly) {
             if leafSummary.contains("Apple Mac OS Application Signing") {
-                return SignatureInfo(kind: .appStore, developerName: developerName(from: leafSummary), teamID: teamID)
+                // Every store app is re-signed by Apple with this one
+                // certificate, so the leaf names the pipeline, not the
+                // developer — no name is derivable from it. Capture the
+                // signing identifier (store-controlled bundle ID) and
+                // let isVerifiedApple decide whether this is Apple's own
+                // store app (Xcode…) worth naming "Apple".
+                var signature = SignatureInfo(
+                    kind: .appStore,
+                    teamID: teamID,
+                    signingIdentifier: info[kSecCodeInfoIdentifier as String] as? String
+                )
+                if signature.isVerifiedApple { signature.developerName = "Apple" }
+                return signature
             }
             return SignatureInfo(kind: .developerID, developerName: developerName(from: leafSummary), teamID: teamID)
         }

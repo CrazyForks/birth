@@ -34,17 +34,24 @@ extension LaunchItem {
             executable = url.path
         }
 
-        // BTM records carry the developer identity directly; trust it for
-        // display instead of re-verifying the binary.
+        // BTM records carry the developer identity directly; trust it
+        // for display instead of re-verifying the binary — but never for
+        // a com.apple.* label, where identity is precisely what the
+        // masquerade check must adjudicate from the real binary. A
+        // pre-filled verdict is permanent (the signature pipeline's
+        // `== nil` guards never re-check one), and both directions burn:
+        // .developerID brands Apple's own App Store apps (Xcode…)
+        // masqueraders, while trusting the label as .apple would let any
+        // bundle that names itself com.apple.* hide among system items.
+        // Items with no executable path stay unverified — which the UI
+        // treats as "no accusation", not as proof of anything.
         var signature: SignatureInfo?
-        if let team = btmItem.teamIdentifier {
+        if let team = btmItem.teamIdentifier, !LaunchItem.claimsAppleLabel(label) {
             signature = SignatureInfo(
                 kind: .developerID,
                 developerName: btmItem.developerName,
                 teamID: team
             )
-        } else if label.hasPrefix("com.apple.") {
-            signature = SignatureInfo(kind: .apple)
         }
 
         self.init(

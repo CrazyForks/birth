@@ -18,6 +18,18 @@ struct SigningTests {
         #expect(signature?.kind == .apple)
     }
 
+    @Test func inspectsAppleStoreDistributedApp() throws {
+        // Xcode is Apple's own app on the App Store signing chain — the
+        // exact shape the masquerade exemption exists for. Sentinel only
+        // on machines that have it; quietly passes elsewhere.
+        let path = "/Applications/Xcode.app"
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        let signature = try #require(CodeSignInspector.inspect(path: path))
+        #expect(signature.kind == .appStore)
+        #expect(signature.signingIdentifier?.hasPrefix("com.apple.") == true)
+        #expect(signature.developerName == "Apple")
+    }
+
     @Test func missingPathReturnsNil() {
         #expect(CodeSignInspector.inspect(path: "/nonexistent/binary") == nil)
     }
@@ -135,8 +147,62 @@ struct MasqueradeTests {
         #expect(!item(label: "com.apple.Finder").isMasquerading(signature: SignatureInfo(kind: .apple)))
     }
 
+    /// Xcode's shape: App Store chain + store-controlled com.apple.*
+    /// signing identifier. Genuine Apple, must not be flagged.
+    @Test func appleStoreAppWithAppleIdentifierIsGenuine() {
+        let xcode = SignatureInfo(
+            kind: .appStore, developerName: "Apple", signingIdentifier: "com.apple.dt.Xcode"
+        )
+        #expect(!item(label: "com.apple.dt.Xcode").isMasquerading(signature: xcode))
+    }
+
+    /// A third-party store app claiming a com.apple.* label is the real
+    /// masquerade; so is a store chain with no identifier captured — the
+    /// exemption requires positive proof, not absence of evidence.
+    @Test func appleLabelOnForeignStoreAppStillMasquerades() {
+        let fake = item(label: "com.apple.fake")
+        #expect(fake.isMasquerading(
+            signature: SignatureInfo(kind: .appStore, signingIdentifier: "com.vendor.tool")
+        ))
+        #expect(fake.isMasquerading(signature: SignatureInfo(kind: .appStore)))
+    }
+
     @Test func unverifiedSignatureIsNotAnAccusation() {
         #expect(!item(label: "com.apple.pending").isMasquerading(signature: nil))
         #expect(!item(label: "com.vendor.tool").isMasquerading(signature: SignatureInfo(kind: .unsigned)))
+    }
+}
+
+@Suite("BTM signature pre-fill")
+struct BTMPreFillTests {
+    private func btm(bundleID: String, team: String?) -> BTMItem {
+        BTMItem(
+            uuid: "test-uuid",
+            name: "Test",
+            teamIdentifier: team,
+            typeDescription: "app",
+            isEnabled: true,
+            executablePath: "/Applications/Test.app",
+            bundleIdentifier: bundleID
+        )
+    }
+
+    /// A com.apple.* label must never receive a pre-filled verdict,
+    /// in either direction — real check or nothing. Full rationale
+    /// lives on the pre-fill logic in `LaunchItem(btmItem:)`.
+    @Test func appleLabelDefersToRealCheckRegardlessOfTeam() {
+        let withTeam = LaunchItem(btmItem: btm(bundleID: "com.apple.dt.Xcode", team: "59GAB85EFG"))
+        #expect(withTeam.signature == nil)
+        #expect(!withTeam.isMasquerading(signature: withTeam.signature))
+
+        let withoutTeam = LaunchItem(btmItem: btm(bundleID: "com.apple.Safari", team: nil))
+        #expect(withoutTeam.signature == nil)
+        #expect(!withoutTeam.isMasquerading(signature: withoutTeam.signature))
+    }
+
+    @Test func thirdPartyTeamStillPreFillsDeveloperID() {
+        let item = LaunchItem(btmItem: btm(bundleID: "com.example.browser", team: "TEAM123456"))
+        #expect(item.signature?.kind == .developerID)
+        #expect(item.signature?.teamID == "TEAM123456")
     }
 }

@@ -74,16 +74,22 @@ public struct LaunchItem: Identifiable, Hashable, Sendable {
     /// The label claims Apple's namespace. A claim, not proof: any plist
     /// author can write a com.apple.* label, so this only stands in for
     /// "Apple" until a signature check confirms or disproves it.
-    public var claimsAppleLabel: Bool {
+    /// Static so call sites without a built item (the BTM bridge) share
+    /// the one namespace definition instead of re-typing the prefix.
+    public static func claimsAppleLabel(_ label: String) -> Bool {
         label.hasPrefix("com.apple.")
+    }
+
+    public var claimsAppleLabel: Bool {
+        Self.claimsAppleLabel(label)
     }
 
     /// The label claims Apple but the verified signature says otherwise —
     /// the classic disguise for malicious launchd persistence. nil
     /// signature means "not verified yet", which is not an accusation.
     public func isMasquerading(signature: SignatureInfo?) -> Bool {
-        guard let signature else { return false }
-        return claimsAppleLabel && signature.kind != .apple
+        guard let signature, claimsAppleLabel else { return false }
+        return !signature.isVerifiedApple
     }
 
     /// BTM login items are macOS-managed: Birth can neither toggle nor
@@ -128,15 +134,17 @@ public struct LaunchItem: Identifiable, Hashable, Sendable {
 
     /// Sort key for the 开发者 column. Populated by two write-through
     /// points in the UI layer (snapshot landing + the streamed signature
-    /// pass). Apple items need the kind fallback: codesigned ones carry
-    /// developerName "Apple" (CodeSignInspector) but BTM-derived ones
-    /// carry only the kind — without it the two halves of "Apple" sort
-    /// into different buckets. Unsigned / not-yet-verified items sort
-    /// together under the empty string; the column may still DISPLAY a
-    /// kind label ("未签名") for them.
+    /// pass). The isVerifiedApple fallback is defense in depth: today
+    /// every producer of a verified-Apple signature also sets
+    /// developerName "Apple" (CodeSignInspector; the BTM bridge no
+    /// longer pre-fills Apple verdicts at all), but any future producer
+    /// that forgets the name must still land in the one "Apple" sort
+    /// bucket. Unsigned / not-yet-verified items sort together under
+    /// the empty string; the column may still DISPLAY a kind label
+    /// ("未签名") for them.
     public var developerSortName: String {
         if let name = signature?.developerName { return name }
-        if signature?.kind == .apple { return "Apple" }
+        if signature?.isVerifiedApple == true { return "Apple" }
         return ""
     }
 
@@ -199,10 +207,41 @@ public struct SignatureInfo: Hashable, Sendable {
     /// e.g. "Docker Inc" from "Developer ID Application: Docker Inc (9BNSXJN65R)"
     public var developerName: String?
     public var teamID: String?
+    /// The identifier baked into the signature (kSecCodeInfoIdentifier).
+    /// Populated only for App Store–chain signatures, where Apple's
+    /// re-signing pipeline derives it from the store-controlled bundle
+    /// ID — so a com.apple.* value proves an Apple-published app.
+    /// Deliberately nil for every other chain: a Developer ID or ad-hoc
+    /// identifier is author-chosen and must never feed a trust decision.
+    public var signingIdentifier: String?
 
-    public init(kind: Kind, developerName: String? = nil, teamID: String? = nil) {
+    public init(
+        kind: Kind,
+        developerName: String? = nil,
+        teamID: String? = nil,
+        signingIdentifier: String? = nil
+    ) {
         self.kind = kind
         self.developerName = developerName
         self.teamID = teamID
+        self.signingIdentifier = signingIdentifier
+    }
+
+    /// The signature positively proves an Apple-published binary — the
+    /// ONE definition consumed by the masquerade check, the inspector's
+    /// developer-name choice, and the sort-key fallback, so the rule
+    /// cannot drift between layers. Apple's own chain qualifies
+    /// outright; the App Store chain qualifies only with a com.apple.*
+    /// signing identifier (Apple ships Xcode, TestFlight… through store
+    /// re-signing, which never satisfies `anchor apple`, but the
+    /// store-controlled identifier namespace is closed to third
+    /// parties). No identifier captured, no proof. Future kinds default
+    /// to "not proof".
+    public var isVerifiedApple: Bool {
+        switch kind {
+        case .apple: true
+        case .appStore: signingIdentifier?.hasPrefix("com.apple.") == true
+        default: false
+        }
     }
 }

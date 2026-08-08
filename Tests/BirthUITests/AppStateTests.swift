@@ -81,7 +81,9 @@ struct AppStateTests {
         )
 
         let report = try #require(box.state.loginItemsDiagnosticReport)
-        #expect(report.contains("Birth 0.2.8"))
+        // Version via the product single source, not a literal — a bumped
+        // release must not fail this test.
+        #expect(report.contains("Birth \(BirthInfo.displayVersion)"))
         #expect(report.contains("macOS"))
         #expect(report.contains("top=[storeData]"))
         #expect(!report.contains("/Applications/"))
