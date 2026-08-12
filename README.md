@@ -2,7 +2,6 @@
 
 **English** | [简体中文](README_CN.md)
 
-[![CI](https://img.shields.io/github/actions/workflow/status/iAmCorey/birth/ci.yml?style=flat-square&label=CI)](https://github.com/iAmCorey/birth/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/iAmCorey/birth?style=flat-square)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/iAmCorey/birth?style=flat-square)](https://github.com/iAmCorey/birth/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-007AFF?style=flat-square)](https://github.com/iAmCorey/birth/releases/latest)
